@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://c8w3mb7rf3rf2" path="res://scripts/systems/health_component.gd" id="2_76oj4"]
 [ext_resource type="Script" uid="uid://bxtt5yod824rp" path="res://scripts/systems/stamina_component.gd" id="3_dyp2m"]
 [ext_resource type="Script" uid="uid://jd5ntudx72d2" path="res://scripts/systems/hitbox.gd" id="4_hitbox"]
+[ext_resource type="PackedScene" uid="uid://iy6fx8pkwjeq" path="res://scenes/ui/debug_hud.tscn" id="5_atpat"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_5kudm"]
 size = Vector2(12, 8)
@@ -33,7 +34,7 @@ script = ExtResource("2_76oj4")
 [node name="StaminaComponent" type="Node" parent="." unique_id=1427229094]
 script = ExtResource("3_dyp2m")
 
-[node name="Hitbox" type="Area2D" parent="."]
+[node name="Hitbox" type="Area2D" parent="." unique_id=1645234303]
 position = Vector2(0, -10)
 collision_layer = 0
 collision_mask = 4
@@ -41,11 +42,11 @@ monitoring = false
 monitorable = false
 script = ExtResource("4_hitbox")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox" unique_id=206914884]
 position = Vector2(16, 0)
 shape = SubResource("Shape_hitbox")
 
-[node name="Visual" type="ColorRect" parent="Hitbox"]
+[node name="Visual" type="ColorRect" parent="Hitbox" unique_id=1522980979]
 visible = false
 offset_left = 8.0
 offset_top = -10.0
@@ -53,3 +54,5 @@ offset_right = 24.0
 offset_bottom = 10.0
 mouse_filter = 2
 color = Color(1, 0.9, 0.2, 0.55)
+
+[node name="DebugHUD" parent="." unique_id=1742191276 instance=ExtResource("5_atpat")]
