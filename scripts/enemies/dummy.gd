@@ -19,6 +19,7 @@ func _ready() -> void:
 
 func _on_damaged(amount: int) -> void:
 	print("Dummy โดน %d  เหลือ %d" % [amount, health.current_health])
+	DamageNumber.spawn(get_tree().current_scene, global_position, amount)
 	# กระพริบขาวสั้น ๆ ให้รู้ว่าโดน
 	body.color = Color.WHITE
 	await get_tree().create_timer(0.08).timeout

@@ -3,9 +3,13 @@
 [ext_resource type="Script" uid="uid://m56auomxbuqh" path="res://scripts/player/player.gd" id="1_rp718"]
 [ext_resource type="Script" uid="uid://c8w3mb7rf3rf2" path="res://scripts/systems/health_component.gd" id="2_76oj4"]
 [ext_resource type="Script" uid="uid://bxtt5yod824rp" path="res://scripts/systems/stamina_component.gd" id="3_dyp2m"]
+[ext_resource type="Script" uid="uid://jd5ntudx72d2" path="res://scripts/systems/hitbox.gd" id="4_hitbox"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_5kudm"]
 size = Vector2(12, 8)
+
+[sub_resource type="RectangleShape2D" id="Shape_hitbox"]
+size = Vector2(16, 20)
 
 [node name="Player" type="CharacterBody2D" unique_id=1347297609]
 script = ExtResource("1_rp718")
@@ -14,6 +18,7 @@ script = ExtResource("1_rp718")
 offset_left = -8.0
 offset_top = -24.0
 offset_right = 8.0
+mouse_filter = 2
 color = Color(0.08627451, 1, 0.23529412, 1)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1317525028]
@@ -27,3 +32,24 @@ script = ExtResource("2_76oj4")
 
 [node name="StaminaComponent" type="Node" parent="." unique_id=1427229094]
 script = ExtResource("3_dyp2m")
+
+[node name="Hitbox" type="Area2D" parent="."]
+position = Vector2(0, -10)
+collision_layer = 0
+collision_mask = 4
+monitoring = false
+monitorable = false
+script = ExtResource("4_hitbox")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox"]
+position = Vector2(16, 0)
+shape = SubResource("Shape_hitbox")
+
+[node name="Visual" type="ColorRect" parent="Hitbox"]
+visible = false
+offset_left = 8.0
+offset_top = -10.0
+offset_right = 24.0
+offset_bottom = 10.0
+mouse_filter = 2
+color = Color(1, 0.9, 0.2, 0.55)
