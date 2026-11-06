@@ -50,6 +50,7 @@ var _danger_mat: StandardMaterial3D
 
 
 func _ready() -> void:
+	add_to_group("enemies")
 	_spawn_pos = global_position
 	# แยกวัสดุของแต่ละตัว ไม่ให้สไลม์หลายตัวกระพริบพร้อมกัน
 	_danger_mat = danger_mesh.get_active_material(0).duplicate()
@@ -59,6 +60,8 @@ func _ready() -> void:
 	health.damaged.connect(_on_damaged)
 	health.died.connect(_on_died)
 	hitbox.parried.connect(_on_parried)
+	hitbox.hitstop_seconds = 0.09            # ถูกสไลม์ชน = หนักกว่าดาบเรา
+	hitbox.spark_color = Color(1.0, 0.4, 0.3)
 
 
 func _physics_process(delta: float) -> void:
@@ -258,3 +261,11 @@ func _respawn() -> void:
 	body.modulate = Color.WHITE
 	body.scale = Vector3.ONE
 	_set_state(State.IDLE)
+
+
+## ผู้เล่นเกิดใหม่ → ศัตรูกลับจุดเดิม HP เต็ม
+func reset_enemy() -> void:
+	hitbox.deactivate()
+	danger_zone.visible = false
+	alert.visible = false
+	_respawn()

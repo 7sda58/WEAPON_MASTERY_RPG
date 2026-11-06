@@ -9,8 +9,10 @@ extends CharacterBody3D
 ## Task 2.13 — Input Buffer: กดปุ่มล่วงหน้าระหว่างท่าได้
 ## Task 2.14 — Perfect Dodge: หลบตรงจังหวะ → Stamina คืน + Slow-motion
 ## Task 2.15 — Parry: กดตรงจังหวะ → ไม่เสียเลือด ศัตรูเสียหลัก (ตีแรง ×2)
+## Task 2.12 — Combat Feedback: รอยดาบ / กล้องสั่น / โดนตีแล้วกระเด็นและชะงัก (Hitstop + ประกายไฟอยู่ใน hitbox.gd)
+## ตาย → หน้าจอ YOU DIED → กด R เกิดใหม่ที่จุดเริ่ม (ศัตรูรีเซ็ตด้วย)
 
-enum State { NORMAL, ATTACK, DODGE, PARRY, DEAD }
+enum State { NORMAL, ATTACK, DODGE, PARRY, HITSTUN, DEAD }
 
 ## ความเร็วเดิน (เมตรต่อวินาที)
 @export var walk_speed: float = 4.0
@@ -67,6 +69,22 @@ enum State { NORMAL, ATTACK, DODGE, PARRY, DEAD }
 ## นานกี่วินาที (เวลาจริง)
 @export var slow_mo_seconds: float = 0.3
 
+@export_group("Hit Reaction (โดนตี)")
+## ชะงักกี่เฟรมเมื่อโดนตี (ขยับ/โจมตีไม่ได้)
+@export var hitstun_frames: int = 16
+## ความเร็วกระเด็นตอนโดนตี (เมตรต่อวินาที)
+@export var knockback_speed: float = 6.0
+
+@export_group("Camera Shake")
+## สั่นเมื่อเราตีโดน
+@export var shake_on_hit: float = 0.06
+## สั่นเมื่อเราโดนตี (แรงกว่า)
+@export var shake_on_hurt: float = 0.16
+## สั่นเมื่อ Parry สำเร็จ
+@export var shake_on_parry: float = 0.1
+## ลดแรงสั่นต่อวินาที
+@export var shake_decay: float = 0.9
+
 @export_group("Input Buffer")
 ## จำปุ่มที่กดล่วงหน้าไว้กี่เฟรม (6 เฟรม = 0.1 วินาที)
 @export var input_buffer_frames: int = 6
@@ -76,6 +94,7 @@ const TINT_STARTUP := Color(1, 1, 0.45, 1)
 const TINT_RECOVERY := Color(0.55, 0.55, 0.6, 1)
 const TINT_DEAD := Color(0.35, 0.35, 0.35, 1)
 const TINT_PARRY := Color(0.6, 0.85, 1.6, 1)
+const DEATH_SCREEN := preload("res://scenes/ui/death_screen.tscn")
 
 var state: State = State.NORMAL
 ## ทิศที่ตัวละครหัน (แนวราบ, ความยาว 1)
@@ -87,6 +106,9 @@ var _dodge_dir: Vector3 = Vector3.ZERO
 var _ignore_attack_frames: int = 0
 
 var hurtbox: Hurtbox
+var _shake: float = 0.0
+var _spawn_pos: Vector3
+var _death_screen: CanvasLayer
 var _buffered_action: StringName = &""
 var _buffer_left: int = 0
 
@@ -97,15 +119,21 @@ var _buffer_left: int = 0
 @onready var facing_arrow: Node3D = $FacingArrow
 @onready var camera_pivot: Node3D = $CameraPivot
 @onready var spring_arm: SpringArm3D = $CameraPivot/SpringArm3D
+@onready var camera: Camera3D = $CameraPivot/SpringArm3D/Camera3D
 
 
 func _ready() -> void:
 	add_to_group("player")
+	_spawn_pos = global_position
+	_death_screen = DEATH_SCREEN.instantiate()
+	add_child(_death_screen)
+	_death_screen.respawn_requested.connect(respawn)
 	spring_arm.add_excluded_object(get_rid())  # กล้องไม่ชนตัวผู้เล่นเอง
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	health.health_changed.connect(_on_health_changed)
 	health.damaged.connect(_on_damaged)
 	health.died.connect(_on_died)
+	hitbox.hit_landed.connect(func(_h: Hurtbox) -> void: shake(shake_on_hit))
 	_create_hurtbox()
 
 
@@ -130,8 +158,9 @@ func _create_hurtbox() -> void:
 
 ## ถูกโจมตี — ถ้าอยู่ในช่วง i-frame จะไม่เสียเลือด
 ## โดนในช่วงต้นของ i-frame = Perfect Dodge
-func _on_hurtbox_hit(_hitbox: Hitbox) -> void:
+func _on_hurtbox_hit(attacker: Hitbox) -> void:
 	if not health.invincible:
+		_take_hit(attacker)
 		return
 	var perfect_end: int = iframe_start + perfect_dodge_frames - 1
 	if state == State.DODGE and _state_frame <= perfect_end:
@@ -149,14 +178,57 @@ func _on_parried(_hitbox: Hitbox) -> void:
 	DamageNumber.spawn_text(get_tree().current_scene, global_position, "PARRY!", Color(1.0, 0.95, 0.4))
 	body.modulate = TINT_NORMAL
 	state = State.NORMAL
+	shake(shake_on_parry)
+	HitSpark.spawn(get_tree().current_scene, hurtbox.get_center() + facing * 0.4, Color(0.7, 0.9, 1.0), 24)
 	_slow_motion()
 
 
-## ทำให้เกมช้าลงชั่วครู่ — นับเวลาจริง ไม่ช้าตาม
+## ทำให้เกมช้าลงชั่วครู่ (Perfect Dodge / Parry)
 func _slow_motion() -> void:
-	Engine.time_scale = slow_mo_scale
-	await get_tree().create_timer(slow_mo_seconds, true, false, true).timeout
-	Engine.time_scale = 1.0
+	HitStop.apply(slow_mo_scale, slow_mo_seconds)
+
+
+## โดนตีจริง — ยกเลิกท่าที่ทำอยู่ กระเด็นออกจากผู้โจมตี และชะงัก
+func _take_hit(attacker: Hitbox) -> void:
+	shake(shake_on_hurt)
+	if health.is_dead:
+		return
+	hitbox.deactivate()
+	hurtbox.parry_active = false
+	var away: Vector3 = global_position - attacker.global_position
+	away.y = 0.0
+	if away.length() < 0.01:
+		away = -facing
+	_set_horizontal(away.normalized() * knockback_speed)
+	state = State.HITSTUN
+	_state_frame = 0
+
+
+func _state_hitstun() -> void:
+	_state_frame += 1
+	velocity.x = move_toward(velocity.x, 0.0, 0.6)
+	velocity.z = move_toward(velocity.z, 0.0, 0.6)
+	# กระพริบแดง-ขาว
+	body.modulate = Color(2.0, 0.6, 0.6) if (_state_frame / 3) % 2 == 0 else TINT_NORMAL
+	if _state_frame >= hitstun_frames:
+		body.modulate = TINT_NORMAL
+		state = State.NORMAL
+
+
+# ---------------- กล้องสั่น ----------------
+## สั่งให้กล้องสั่น — ค่าใหม่แรงกว่าค่าที่สั่นอยู่ถึงจะแทนที่
+func shake(amount: float) -> void:
+	_shake = maxf(_shake, amount)
+
+
+func _process(delta: float) -> void:
+	if _shake > 0.0:
+		camera.h_offset = randf_range(-1.0, 1.0) * _shake
+		camera.v_offset = randf_range(-1.0, 1.0) * _shake
+		_shake = move_toward(_shake, 0.0, shake_decay * delta)
+	else:
+		camera.h_offset = 0.0
+		camera.v_offset = 0.0
 
 
 # ---------------- กล้องและเมาส์ ----------------
@@ -202,6 +274,8 @@ func _physics_process(delta: float) -> void:
 			_state_dodge()
 		State.PARRY:
 			_state_parry()
+		State.HITSTUN:
+			_state_hitstun()
 		State.DEAD:
 			_set_horizontal(Vector3.ZERO)
 	if not is_on_floor():
@@ -297,6 +371,7 @@ func _state_attack() -> void:
 	elif _state_frame == active_start:
 		body.modulate = TINT_NORMAL
 		hitbox.activate()                   # Active: เปิด Hitbox
+		SlashEffect.spawn(self, Vector3(0, 0.8, 0), atan2(-facing.x, -facing.z) + 0.25)
 	elif _state_frame == active_end:
 		hitbox.deactivate()
 		body.modulate = TINT_RECOVERY       # Recovery: ตัวออกเข้ม
@@ -370,17 +445,42 @@ func _on_damaged(amount: int) -> void:
 
 
 func _on_died() -> void:
-	print("Player died")
 	_end_dodge()
 	if hurtbox:
 		hurtbox.parry_active = false
 	state = State.DEAD
 	hitbox.deactivate()
-	body.modulate = TINT_DEAD  # ชั่วคราว จนกว่าจะมีระบบตายจริง
+	_set_horizontal(Vector3.ZERO)
+	HitStop.apply(0.3, 0.7)                 # ช้าลงตอนล้ม ให้รู้ว่าตายแล้ว
+	# ล้มลง: ยุบตัว จมลงพื้น สีเทา
+	var t := create_tween().set_parallel(true)
+	t.tween_property(body, "modulate", TINT_DEAD, 0.4)
+	t.tween_property(body, "scale", Vector3(1.25, 0.35, 1.0), 0.35).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+	t.tween_property(body, "position:y", 0.3, 0.35)
+	await get_tree().create_timer(0.6, true, false, true).timeout
+	if state == State.DEAD:
+		_death_screen.show_death()
+
+
+## เกิดใหม่ที่จุดเริ่ม — HP/Stamina เต็ม และรีเซ็ตศัตรูทั้งหมด
+func respawn() -> void:
+	Engine.time_scale = 1.0
+	_death_screen.hide_death()
+	global_position = _spawn_pos
+	velocity = Vector3.ZERO
+	health.reset()
+	stamina.restore(stamina.max_stamina)
+	body.modulate = TINT_NORMAL
+	body.scale = Vector3.ONE
+	body.position.y = 0.75
+	state = State.NORMAL
+	_state_frame = 0
+	_buffered_action = &""
+	get_tree().call_group("enemies", "reset_enemy")
 
 
 # ---------------- DEBUG (ปุ่มทดสอบ — จะลบเมื่อปิด Phase 2) ----------------
-# F1 = โดนดาเมจ 15 | F2 = ใช้ Stamina 30 | F3 = ฟื้น HP เต็ม
+# F1 = โดนดาเมจ 15 | F2 = ใช้ Stamina 30 | F3 = เกิดใหม่ทันที
 # F4 = เปิด/ปิด "ดาเมจอัตโนมัติทุก 1 วินาที" ไว้ฝึกจับจังหวะหลบ
 var _debug_pulse: Timer
 
@@ -394,9 +494,7 @@ func _debug_input(event: InputEvent) -> void:
 				if not stamina.try_spend(30):
 					print("Stamina ไม่พอ!")
 			KEY_F3:
-				health.reset()
-				state = State.NORMAL
-				body.modulate = TINT_NORMAL
+				respawn()
 			KEY_F4:
 				_toggle_debug_pulse()
 

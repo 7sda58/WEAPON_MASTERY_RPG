@@ -1,15 +1,24 @@
 class_name Hitbox
 extends Area3D
 ## พื้นที่โจมตี — เปิดเฉพาะช่วง Active ของท่าโจมตี
-## Task 2.10 — Hit Detection
+## Task 2.10 — Hit Detection / Task 2.12 — Hitstop + ประกายไฟเมื่อโดน
 ## ตีโดน Hurtbox ได้ครั้งเดียวต่อการเปิดหนึ่งครั้ง (ไม่โดนซ้ำหลายเฟรม)
 
 ## ถูก Parry สำเร็จ — เจ้าของท่า (เช่น ศัตรู) ใช้สัญญาณนี้เข้าสถานะเสียหลัก
 signal parried
+## ตีโดนและดาเมจเข้าจริง — เจ้าของใช้สั่นกล้อง ฯลฯ
+signal hit_landed(hurtbox: Hurtbox)
 
 @export var damage: int = 10
-## false = ท่านี้ Parry ไม่ได้ (ต้องหลบเท่านั้น) — Task 3.16 จะใช้สัญญาณสีแดงบอกผู้เล่น
+## false = ท่านี้ Parry ไม่ได้ (ต้องหลบเท่านั้น)
 @export var parryable: bool = true
+
+@export_group("Feedback")
+## เกมหยุดนานแค่ไหนเมื่อโดน (วินาทีจริง) — 0.06 ≈ 4 เฟรม, 0 = ปิด
+@export var hitstop_seconds: float = 0.06
+@export var spark_color: Color = Color(1, 0.9, 0.4)
+## แสดงกล่องสีเหลือง (ใช้ตอนดีบักเท่านั้น)
+@export var show_debug_box: bool = false
 
 var _already_hit: Array[Area3D] = []
 
@@ -41,12 +50,25 @@ func got_parried() -> void:
 
 
 func _on_area_entered(area: Area3D) -> void:
-	if area is Hurtbox and not _already_hit.has(area):
-		_already_hit.append(area)
-		area.receive_hit(self)
+	if not (area is Hurtbox) or _already_hit.has(area):
+		return
+	_already_hit.append(area)
+	var hurtbox := area as Hurtbox
+	if hurtbox.receive_hit(self):
+		# จุดปะทะ: ผิวด้านหน้าของตัวที่ถูกตี ฝั่งที่หันหาผู้โจมตี
+		var target: Vector3 = hurtbox.get_center()
+		var to_attacker: Vector3 = get_parent().global_position - target
+		to_attacker.y = 0.0
+		var contact: Vector3 = target
+		if to_attacker.length() > 0.01:
+			contact += to_attacker.normalized() * 0.35
+		HitSpark.spawn(get_tree().current_scene, contact, spark_color)
+		if hitstop_seconds > 0.0:
+			HitStop.apply(0.05, hitstop_seconds)
+		hit_landed.emit(hurtbox)
 
 
-## แสดงกล่องสีเหลืองโปร่ง (ชั่วคราว จนกว่าจะมีเอฟเฟกต์จริง)
+## กล่องสีเหลืองโปร่ง — แสดงเฉพาะเมื่อเปิด show_debug_box
 func _set_visual(on: bool) -> void:
 	if has_node("Visual"):
-		$Visual.visible = on
+		$Visual.visible = on and show_debug_box

@@ -21,11 +21,22 @@ func _ready() -> void:
 	monitorable = true
 
 
-func receive_hit(hitbox: Hitbox) -> void:
+## คืนค่า true ถ้าดาเมจเข้าจริง (ไม่ถูก Parry และไม่ได้อยู่ในช่วงอมตะ)
+func receive_hit(hitbox: Hitbox) -> bool:
 	if parry_active and hitbox.parryable:
 		hitbox.got_parried()
 		parried.emit(hitbox)
-		return
+		return false
+	var landed: bool = health != null and not health.invincible and not health.is_dead
 	if health:
 		health.take_damage(roundi(hitbox.damage * damage_multiplier))
 	hit_received.emit(hitbox)
+	return landed
+
+
+## จุดกลางของพื้นที่รับดาเมจ (ใช้วางเอฟเฟกต์)
+func get_center() -> Vector3:
+	for c in get_children():
+		if c is CollisionShape3D:
+			return c.global_position
+	return global_position
