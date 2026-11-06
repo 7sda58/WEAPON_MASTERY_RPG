@@ -40,3 +40,9 @@ func try_spend(cost: float) -> bool:
 	_regen_wait = regen_delay
 	stamina_changed.emit(current_stamina, max_stamina)
 	return true
+
+
+## คืน Stamina (รางวัลจาก Perfect Dodge / Parry) — ไม่เกินค่าสูงสุด
+func restore(amount: float) -> void:
+	current_stamina = minf(current_stamina + amount, max_stamina)
+	stamina_changed.emit(current_stamina, max_stamina)

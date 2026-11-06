@@ -4,7 +4,12 @@ extends Area3D
 ## Task 2.10 — Hit Detection
 ## ตีโดน Hurtbox ได้ครั้งเดียวต่อการเปิดหนึ่งครั้ง (ไม่โดนซ้ำหลายเฟรม)
 
+## ถูก Parry สำเร็จ — เจ้าของท่า (เช่น ศัตรู) ใช้สัญญาณนี้เข้าสถานะเสียหลัก
+signal parried
+
 @export var damage: int = 10
+## false = ท่านี้ Parry ไม่ได้ (ต้องหลบเท่านั้น) — Task 3.16 จะใช้สัญญาณสีแดงบอกผู้เล่น
+@export var parryable: bool = true
 
 var _already_hit: Array[Area3D] = []
 
@@ -27,6 +32,12 @@ func activate() -> void:
 func deactivate() -> void:
 	set_deferred("monitoring", false)
 	_set_visual(false)
+
+
+## Hurtbox เรียกเมื่อผู้เล่น Parry ท่านี้สำเร็จ
+func got_parried() -> void:
+	deactivate()
+	parried.emit()
 
 
 func _on_area_entered(area: Area3D) -> void:

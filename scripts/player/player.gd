@@ -7,8 +7,10 @@ extends CharacterBody3D
 ## Task 2.9  — Basic Attack: นับเวลาเป็นเฟรม (60 เฟรม = 1 วินาที) ฟันไปทางที่กล้องมอง
 ## Task 2.11 — Dodge: พุ่งหลบพร้อม i-frame
 ## Task 2.13 — Input Buffer: กดปุ่มล่วงหน้าระหว่างท่าได้
+## Task 2.14 — Perfect Dodge: หลบตรงจังหวะ → Stamina คืน + Slow-motion
+## Task 2.15 — Parry: กดตรงจังหวะ → ไม่เสียเลือด ศัตรูเสียหลัก (ตีแรง ×2)
 
-enum State { NORMAL, ATTACK, DODGE, DEAD }
+enum State { NORMAL, ATTACK, DODGE, PARRY, DEAD }
 
 ## ความเร็วเดิน (เมตรต่อวินาที)
 @export var walk_speed: float = 4.0
@@ -45,6 +47,26 @@ enum State { NORMAL, ATTACK, DODGE, DEAD }
 @export var iframe_end: int = 11
 @export var dodge_stamina_cost: float = 20.0
 
+@export_group("Perfect Dodge")
+## โดนตีภายในกี่เฟรมแรกของ i-frame ถึงนับเป็น Perfect (8 เฟรม ≈ 0.13 วินาที)
+@export var perfect_dodge_frames: int = 8
+## Stamina ที่ได้คืน (มากกว่าที่ใช้หลบ = ได้กำไร)
+@export var perfect_dodge_refund: float = 25.0
+
+@export_group("Parry (หน่วย: เฟรม)")
+## หน้าต่าง Parry — กดแล้วมีผลกี่เฟรม (8 เฟรม ≈ 0.13 วินาที)
+@export var parry_window: int = 8
+## Parry พลาด (ไม่มีอะไรมาโดน) ต้องค้างท่านี้กี่เฟรม — ช่องให้ถูกลงโทษ
+@export var parry_recovery: int = 20
+@export var parry_stamina_cost: float = 10.0
+@export var parry_stamina_refund: float = 20.0
+
+@export_group("Slow-motion")
+## ความเร็วเกมตอน Perfect Dodge / Parry (0.25 = ช้าลง 4 เท่า)
+@export var slow_mo_scale: float = 0.25
+## นานกี่วินาที (เวลาจริง)
+@export var slow_mo_seconds: float = 0.3
+
 @export_group("Input Buffer")
 ## จำปุ่มที่กดล่วงหน้าไว้กี่เฟรม (6 เฟรม = 0.1 วินาที)
 @export var input_buffer_frames: int = 6
@@ -53,6 +75,7 @@ const TINT_NORMAL := Color(1, 1, 1, 1)
 const TINT_STARTUP := Color(1, 1, 0.45, 1)
 const TINT_RECOVERY := Color(0.55, 0.55, 0.6, 1)
 const TINT_DEAD := Color(0.35, 0.35, 0.35, 1)
+const TINT_PARRY := Color(0.6, 0.85, 1.6, 1)
 
 var state: State = State.NORMAL
 ## ทิศที่ตัวละครหัน (แนวราบ, ความยาว 1)
@@ -63,6 +86,7 @@ var _dodge_dir: Vector3 = Vector3.ZERO
 ## กันไม่ให้คลิกที่ใช้จับเมาส์กลับเข้าเกม กลายเป็นการฟัน
 var _ignore_attack_frames: int = 0
 
+var hurtbox: Hurtbox
 var _buffered_action: StringName = &""
 var _buffer_left: int = 0
 
@@ -82,6 +106,57 @@ func _ready() -> void:
 	health.health_changed.connect(_on_health_changed)
 	health.damaged.connect(_on_damaged)
 	health.died.connect(_on_died)
+	_create_hurtbox()
+
+
+## สร้างพื้นที่รับดาเมจของผู้เล่น (Collision Layer 4 = ค่า 8) — Hitbox ของศัตรูจะมองหาชั้นนี้
+func _create_hurtbox() -> void:
+	var hb := Hurtbox.new()
+	hb.name = "Hurtbox"
+	hb.collision_layer = 8
+	hb.collision_mask = 0
+	hb.health = health
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(0.7, 1.4, 0.7)
+	shape.shape = box
+	shape.position = Vector3(0, 0.7, 0)
+	hb.add_child(shape)
+	add_child(hb)
+	hb.hit_received.connect(_on_hurtbox_hit)
+	hb.parried.connect(_on_parried)
+	hurtbox = hb
+
+
+## ถูกโจมตี — ถ้าอยู่ในช่วง i-frame จะไม่เสียเลือด
+## โดนในช่วงต้นของ i-frame = Perfect Dodge
+func _on_hurtbox_hit(_hitbox: Hitbox) -> void:
+	if not health.invincible:
+		return
+	var perfect_end: int = iframe_start + perfect_dodge_frames - 1
+	if state == State.DODGE and _state_frame <= perfect_end:
+		stamina.restore(perfect_dodge_refund)
+		DamageNumber.spawn_text(get_tree().current_scene, global_position, "PERFECT!", Color(1.0, 0.85, 0.2))
+		_slow_motion()
+	else:
+		DamageNumber.spawn_text(get_tree().current_scene, global_position, "DODGE!", Color(0.5, 0.9, 1.0))
+
+
+## Parry สำเร็จ — ไม่เสียเลือด ได้ Stamina คืน และกลับมาขยับได้ทันทีเพื่อตีสวน
+func _on_parried(_hitbox: Hitbox) -> void:
+	hurtbox.parry_active = false
+	stamina.restore(parry_stamina_refund)
+	DamageNumber.spawn_text(get_tree().current_scene, global_position, "PARRY!", Color(1.0, 0.95, 0.4))
+	body.modulate = TINT_NORMAL
+	state = State.NORMAL
+	_slow_motion()
+
+
+## ทำให้เกมช้าลงชั่วครู่ — นับเวลาจริง ไม่ช้าตาม
+func _slow_motion() -> void:
+	Engine.time_scale = slow_mo_scale
+	await get_tree().create_timer(slow_mo_seconds, true, false, true).timeout
+	Engine.time_scale = 1.0
 
 
 # ---------------- กล้องและเมาส์ ----------------
@@ -125,6 +200,8 @@ func _physics_process(delta: float) -> void:
 			_state_attack()
 		State.DODGE:
 			_state_dodge()
+		State.PARRY:
+			_state_parry()
 		State.DEAD:
 			_set_horizontal(Vector3.ZERO)
 	if not is_on_floor():
@@ -149,7 +226,7 @@ func _update_facing_visual() -> void:
 func _update_input_buffer() -> void:
 	if _ignore_attack_frames > 0:
 		_ignore_attack_frames -= 1
-	for action: StringName in [&"attack", &"dodge"]:
+	for action: StringName in [&"attack", &"dodge", &"parry"]:
 		if Input.is_action_just_pressed(action) and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 			if action == &"attack" and _ignore_attack_frames > 0:
 				continue
@@ -178,6 +255,12 @@ func _state_normal() -> void:
 			_start_dodge(move_dir)
 			return
 		print("Stamina ไม่พอสำหรับหลบ")
+
+	if _consume_buffer(&"parry"):
+		if stamina.try_spend(parry_stamina_cost):
+			_start_parry()
+			return
+		print("Stamina ไม่พอสำหรับ Parry")
 
 	if _consume_buffer(&"attack"):
 		if stamina.try_spend(attack_stamina_cost):
@@ -254,6 +337,29 @@ func _end_dodge() -> void:
 	body.modulate = TINT_NORMAL
 
 
+# ---------------- PARRY: หน้าต่าง Parry → (พลาด) Recovery ----------------
+func _start_parry() -> void:
+	state = State.PARRY
+	_state_frame = 0
+	_set_horizontal(Vector3.ZERO)
+	if attack_toward_camera:
+		facing = _camera_forward()
+	hurtbox.parry_active = true
+
+
+func _state_parry() -> void:
+	_state_frame += 1
+	_set_horizontal(Vector3.ZERO)
+	if _state_frame <= parry_window:
+		body.modulate = TINT_PARRY          # หน้าต่าง Parry: ตัวเรืองฟ้า
+	else:
+		hurtbox.parry_active = false
+		body.modulate = TINT_RECOVERY       # พลาด: ค้างท่า โดนตีได้
+	if _state_frame >= parry_window + parry_recovery:
+		body.modulate = TINT_NORMAL
+		state = State.NORMAL
+
+
 # ---------------- โดนตี / ตาย ----------------
 func _on_health_changed(current: int, maximum: int) -> void:
 	print("Player HP: %d / %d" % [current, maximum])
@@ -266,12 +372,14 @@ func _on_damaged(amount: int) -> void:
 func _on_died() -> void:
 	print("Player died")
 	_end_dodge()
+	if hurtbox:
+		hurtbox.parry_active = false
 	state = State.DEAD
 	hitbox.deactivate()
 	body.modulate = TINT_DEAD  # ชั่วคราว จนกว่าจะมีระบบตายจริง
 
 
-# ---------------- DEBUG (ลบออกเมื่อมีศัตรูตีกลับ) ----------------
+# ---------------- DEBUG (ปุ่มทดสอบ — จะลบเมื่อปิด Phase 2) ----------------
 # F1 = โดนดาเมจ 15 | F2 = ใช้ Stamina 30 | F3 = ฟื้น HP เต็ม
 # F4 = เปิด/ปิด "ดาเมจอัตโนมัติทุก 1 วินาที" ไว้ฝึกจับจังหวะหลบ
 var _debug_pulse: Timer
