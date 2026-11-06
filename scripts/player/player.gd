@@ -12,6 +12,7 @@ extends CharacterBody3D
 ## Task 2.12 — Combat Feedback: รอยดาบ / กล้องสั่น / โดนตีแล้วกระเด็นและชะงัก (Hitstop + ประกายไฟอยู่ใน hitbox.gd)
 ## ตาย → หน้าจอ YOU DIED → กด R เกิดใหม่ที่จุดเริ่ม (ศัตรูรีเซ็ตด้วย)
 ## Task 3.1 — อาวุธอ่านจาก WeaponData (data/weapons/*.tres) + โมเดลอาวุธที่ถือ
+## Task 2.6 — ภาพ Pixel 8 ทิศ + ท่ายืน/เดิน/โจมตี/หลบ/โดนตี (SpriteAnimator)
 ## Task 3.6 — เปลี่ยนอาวุธ: ปุ่ม 1 = ดาบ, 2 = หอก (ชั่วคราว จนกว่าจะมี Input Map)
 ## Task 3.7 — ท่าโจมตีเป็นคอมโบ (AttackMove): ฟัน/ปัด หรือ แทง แต่ละท่ามี Hitbox และเอฟเฟกต์ของตัวเอง
 
@@ -97,6 +98,15 @@ const TINT_RECOVERY := Color(0.55, 0.55, 0.6, 1)
 const TINT_DEAD := Color(0.35, 0.35, 0.35, 1)
 const TINT_PARRY := Color(0.6, 0.85, 1.6, 1)
 const DEATH_SCREEN := preload("res://scenes/ui/death_screen.tscn")
+const SPRITE_SHEET_PATH := "res://assets/sprites/placeholder/player_sheet.png"
+## ท่าใน Sheet (ลำดับแถว) — ดู scripts/systems/sprite_animator.gd
+const ANIMS := {
+	&"idle": {"row": 0, "frames": 2, "fps": 2.5},
+	&"walk": {"row": 1, "frames": 4, "fps": 9.0},
+	&"attack": {"row": 2, "frames": 2, "fps": 0.0},
+	&"dodge": {"row": 3, "frames": 1, "fps": 0.0},
+	&"hurt": {"row": 4, "frames": 1, "fps": 0.0},
+}
 
 var state: State = State.NORMAL
 ## ทิศที่ตัวละครหัน (แนวราบ, ความยาว 1)
@@ -115,6 +125,7 @@ var _weapon_root: Node3D
 var _swing_pivot: Node3D
 var _weapon_model: Node3D
 
+var _anim: SpriteAnimator
 var _hitbox_box: BoxShape3D
 var _hitbox_shape: CollisionShape3D
 
@@ -144,6 +155,7 @@ var _buffer_left: int = 0
 
 func _ready() -> void:
 	add_to_group("player")
+	_anim = SpriteAnimator.new(body, load(SPRITE_SHEET_PATH), 4, ANIMS)
 	_spawn_pos = global_position
 	_death_screen = DEATH_SCREEN.instantiate()
 	add_child(_death_screen)
@@ -350,6 +362,24 @@ func _state_hitstun() -> void:
 		state = State.NORMAL
 
 
+# ---------------- ภาพตัวละคร (Animation) ----------------
+func _update_animation(delta: float) -> void:
+	match state:
+		State.NORMAL:
+			var speed: float = Vector2(velocity.x, velocity.z).length()
+			_anim.play(&"walk" if speed > 0.3 else &"idle")
+		State.ATTACK:
+			# เฟรม 0 = ง้าง, เฟรม 1 = ฟัน/แทง (ผูกกับ Frame Data ของท่า)
+			_anim.play(&"attack", 0 if _state_frame <= _move.startup_frames else 1)
+		State.PARRY:
+			_anim.play(&"attack", 0)
+		State.DODGE:
+			_anim.play(&"dodge")
+		State.HITSTUN, State.DEAD:
+			_anim.play(&"hurt")
+	_anim.update(delta, facing)
+
+
 # ---------------- กล้องสั่น ----------------
 ## สั่งให้กล้องสั่น — ค่าใหม่แรงกว่าค่าที่สั่นอยู่ถึงจะแทนที่
 func shake(amount: float) -> void:
@@ -357,6 +387,7 @@ func shake(amount: float) -> void:
 
 
 func _process(delta: float) -> void:
+	_update_animation(delta)
 	if _shake > 0.0:
 		camera.h_offset = randf_range(-1.0, 1.0) * _shake
 		camera.v_offset = randf_range(-1.0, 1.0) * _shake

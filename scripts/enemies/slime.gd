@@ -3,8 +3,18 @@ extends CharacterBody3D
 ## ศัตรูพื้นฐาน — สไลม์
 ## เห็นผู้เล่น → เดินเข้าหา → ง้าง (Telegraph) → พุ่งชน → พักเหนื่อย (ช่องให้ผู้เล่นสวน)
 ## Task 3.12 / 3.16 (เวอร์ชันเล็กสำหรับ Prototype ตาม CR-009)
+## ภาพ Pixel 8 ทิศ: ยืน / เด้ง / โกรธ (ง้าง-พุ่ง) / เจ็บ / มึน (SpriteAnimator)
 
 enum State { IDLE, CHASE, TELEGRAPH, LUNGE, RECOVER, HITSTUN, STAGGERED, DEAD }
+
+const SPRITE_SHEET_PATH := "res://assets/sprites/placeholder/slime_sheet.png"
+const ANIMS := {
+	&"idle": {"row": 0, "frames": 4, "fps": 4.0},
+	&"move": {"row": 1, "frames": 4, "fps": 8.0},
+	&"angry": {"row": 2, "frames": 2, "fps": 0.0},
+	&"hurt": {"row": 3, "frames": 1, "fps": 0.0},
+	&"dizzy": {"row": 4, "frames": 4, "fps": 6.0},
+}
 
 @export var detect_range: float = 8.0
 @export var give_up_range: float = 14.0
@@ -36,6 +46,9 @@ var _lunge_dir: Vector3 = Vector3.FORWARD
 var _spawn_pos: Vector3
 var _flash_frames: int = 0
 var _danger_mat: StandardMaterial3D
+var _anim: SpriteAnimator
+## ทิศที่สไลม์หัน — ใช้เลือกภาพ 8 ทิศ
+var _facing: Vector3 = Vector3.BACK
 
 @onready var health: HealthComponent = $HealthComponent
 @onready var body: Sprite3D = $Sprite3D
@@ -51,6 +64,7 @@ var _danger_mat: StandardMaterial3D
 
 func _ready() -> void:
 	add_to_group("enemies")
+	_anim = SpriteAnimator.new(body, load(SPRITE_SHEET_PATH), 4, ANIMS)
 	_spawn_pos = global_position
 	# แยกวัสดุของแต่ละตัว ไม่ให้สไลม์หลายตัวกระพริบพร้อมกัน
 	_danger_mat = danger_mesh.get_active_material(0).duplicate()
@@ -89,6 +103,31 @@ func _physics_process(delta: float) -> void:
 	if _flash_frames > 0:
 		_flash_frames -= 1
 		body.modulate = Color(3, 3, 3, 1)  # กระพริบสว่างเมื่อโดนตี
+
+
+func _process(delta: float) -> void:
+	var p := _player()
+	match state:
+		State.CHASE:
+			_anim.play(&"move")
+		State.TELEGRAPH:
+			_anim.play(&"angry", 0)
+		State.LUNGE:
+			_anim.play(&"angry", 1)
+		State.HITSTUN, State.DEAD:
+			_anim.play(&"hurt")
+		State.STAGGERED:
+			_anim.play(&"dizzy")
+		_:
+			_anim.play(&"idle")
+	# หันหาผู้เล่น ยกเว้นตอนง้าง/พุ่ง ที่หันตามทิศพุ่ง
+	if state in [State.TELEGRAPH, State.LUNGE]:
+		_facing = _lunge_dir
+	elif p and state != State.DEAD:
+		var to: Vector3 = _to_player(p)
+		if to.length() > 0.1:
+			_facing = to.normalized()
+	_anim.update(delta, _facing)
 
 
 func _set_state(s: State) -> void:
