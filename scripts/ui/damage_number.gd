@@ -1,12 +1,16 @@
 class_name DamageNumber
 extends Label
-## ตัวเลขดาเมจลอยขึ้นแล้วจางหาย
+## ตัวเลข (หรือข้อความ) ลอยขึ้นแล้วจางหาย
 ## เรียกใช้: DamageNumber.spawn(get_tree().current_scene, global_position, 10)
 
 
 static func spawn(world: Node, pos: Vector2, amount: int, color: Color = Color.WHITE) -> void:
+	spawn_text(world, pos, str(amount), color)
+
+
+static func spawn_text(world: Node, pos: Vector2, text: String, color: Color = Color.WHITE) -> void:
 	var n := DamageNumber.new()
-	n.text = str(amount)
+	n.text = text
 	n.modulate = color
 	n.z_index = 100
 	n.add_theme_font_size_override("font_size", 10)
@@ -14,7 +18,7 @@ static func spawn(world: Node, pos: Vector2, amount: int, color: Color = Color.W
 	n.add_theme_constant_override("outline_size", 3)
 	world.add_child(n)
 	# ตั้งเหนือหัวตัวละคร สุ่มเยื้องซ้ายขวาเล็กน้อยไม่ให้ตัวเลขซ้อนกัน
-	n.global_position = pos + Vector2(randf_range(-8.0, 2.0), -38.0)
+	n.global_position = pos + Vector2(randf_range(-8.0, 2.0) - 3.0 * (text.length() - 1), -38.0)
 	n._play()
 
 

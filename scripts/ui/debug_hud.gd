@@ -22,4 +22,4 @@ func _process(_delta: float) -> void:
 	info.text = "HP %d/%d  ST %d/%d  %s" % [
 		p.health.current_health, p.health.max_health,
 		int(p.stamina.current_stamina), int(p.stamina.max_stamina),
-		Player.State.keys()[p.state]]
+		Player.State.keys()[p.state] + ("  INV" if p.health.invincible else "")]
