@@ -1,0 +1,152 @@
+[gd_scene format=3 uid="uid://brermiqtwukv"]
+
+[ext_resource type="Script" uid="uid://ld5xa0phnp8x" path="res://scripts/enemies/slime_model.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_body"]
+albedo_color = Color(0.42, 0.84, 0.45, 1)
+roughness = 0.22
+rim_enabled = true
+rim = 0.35
+rim_tint = 0.6
+
+[sub_resource type="StandardMaterial3D" id="Mat_core"]
+albedo_color = Color(0.25, 0.62, 0.3, 1)
+roughness = 0.6
+
+[sub_resource type="StandardMaterial3D" id="Mat_shine"]
+shading_mode = 0
+albedo_color = Color(0.92, 1, 0.92, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_eye"]
+albedo_color = Color(0.06, 0.1, 0.07, 1)
+roughness = 0.2
+
+[sub_resource type="StandardMaterial3D" id="Mat_white"]
+shading_mode = 0
+albedo_color = Color(1, 1, 1, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_brow"]
+albedo_color = Color(0.12, 0.25, 0.13, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_star"]
+shading_mode = 0
+albedo_color = Color(1, 0.88, 0.25, 1)
+
+[sub_resource type="SphereMesh" id="Mesh_body"]
+radius = 0.46
+height = 0.72
+radial_segments = 12
+rings = 6
+
+[sub_resource type="CylinderMesh" id="Mesh_base"]
+top_radius = 0.44
+bottom_radius = 0.4
+height = 0.12
+radial_segments = 12
+
+[sub_resource type="SphereMesh" id="Mesh_shine"]
+radius = 0.07
+height = 0.1
+radial_segments = 6
+rings = 3
+
+[sub_resource type="SphereMesh" id="Mesh_eye"]
+radius = 0.075
+height = 0.15
+radial_segments = 8
+rings = 4
+
+[sub_resource type="SphereMesh" id="Mesh_pupil"]
+radius = 0.025
+height = 0.05
+radial_segments = 6
+rings = 3
+
+[sub_resource type="BoxMesh" id="Mesh_brow"]
+size = Vector3(0.13, 0.035, 0.03)
+
+[sub_resource type="BoxMesh" id="Mesh_mouth"]
+size = Vector3(0.09, 0.03, 0.02)
+
+[sub_resource type="BoxMesh" id="Mesh_star"]
+size = Vector3(0.09, 0.09, 0.02)
+
+[node name="SlimeModel" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.36, 0)
+mesh = SubResource("Mesh_body")
+surface_material_override/0 = SubResource("Mat_body")
+
+[node name="Base" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 0)
+mesh = SubResource("Mesh_base")
+surface_material_override/0 = SubResource("Mat_core")
+
+[node name="Shine" type="MeshInstance3D" parent="."]
+transform = Transform3D(1.4, 0, 0, 0, 0.8, 0, 0, 0, 1, -0.17, 0.58, -0.22)
+cast_shadow = 0
+mesh = SubResource("Mesh_shine")
+surface_material_override/0 = SubResource("Mat_shine")
+
+[node name="Face" type="Node3D" parent="."]
+
+[node name="EyeL" type="MeshInstance3D" parent="Face"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.14, 0.4, -0.38)
+mesh = SubResource("Mesh_eye")
+surface_material_override/0 = SubResource("Mat_eye")
+
+[node name="PupilL" type="MeshInstance3D" parent="Face/EyeL"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.025, 0.03, -0.06)
+mesh = SubResource("Mesh_pupil")
+surface_material_override/0 = SubResource("Mat_white")
+
+[node name="EyeR" type="MeshInstance3D" parent="Face"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.14, 0.4, -0.38)
+mesh = SubResource("Mesh_eye")
+surface_material_override/0 = SubResource("Mat_eye")
+
+[node name="PupilR" type="MeshInstance3D" parent="Face/EyeR"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.025, 0.03, -0.06)
+mesh = SubResource("Mesh_pupil")
+surface_material_override/0 = SubResource("Mat_white")
+
+[node name="BrowL" type="MeshInstance3D" parent="Face"]
+transform = Transform3D(0.906308, 0.422618, 0, -0.422618, 0.906308, 0, 0, 0, 1, -0.14, 0.52, -0.36)
+visible = false
+mesh = SubResource("Mesh_brow")
+surface_material_override/0 = SubResource("Mat_brow")
+
+[node name="BrowR" type="MeshInstance3D" parent="Face"]
+transform = Transform3D(0.906308, -0.422618, 0, 0.422618, 0.906308, 0, 0, 0, 1, 0.14, 0.52, -0.36)
+visible = false
+mesh = SubResource("Mesh_brow")
+surface_material_override/0 = SubResource("Mat_brow")
+
+[node name="Mouth" type="MeshInstance3D" parent="Face"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.27, -0.41)
+mesh = SubResource("Mesh_mouth")
+surface_material_override/0 = SubResource("Mat_brow")
+
+[node name="Stars" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+visible = false
+
+[node name="Star1" type="MeshInstance3D" parent="Stars"]
+transform = Transform3D(0.707107, -0.707107, 0, 0.707107, 0.707107, 0, 0, 0, 1, 0.28, 0, 0)
+cast_shadow = 0
+mesh = SubResource("Mesh_star")
+surface_material_override/0 = SubResource("Mat_star")
+
+[node name="Star2" type="MeshInstance3D" parent="Stars"]
+transform = Transform3D(0.707107, -0.707107, 0, 0.707107, 0.707107, 0, 0, 0, 1, -0.14, 0, 0.24)
+cast_shadow = 0
+mesh = SubResource("Mesh_star")
+surface_material_override/0 = SubResource("Mat_star")
+
+[node name="Star3" type="MeshInstance3D" parent="Stars"]
+transform = Transform3D(0.707107, -0.707107, 0, 0.707107, 0.707107, 0, 0, 0, 1, -0.14, 0, -0.24)
+cast_shadow = 0
+mesh = SubResource("Mesh_star")
+surface_material_override/0 = SubResource("Mat_star")

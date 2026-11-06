@@ -1,6 +1,6 @@
 class_name Player
 extends CharacterBody3D
-## ตัวละครผู้เล่น — ภาพ Pixel (Sprite3D) ในโลก 3D, กล้องบุคคลที่ 3 หมุนด้วยเมาส์
+## ตัวละครผู้เล่น — โมเดล 3D Low-poly ในโลก 3D, กล้องบุคคลที่ 3 หมุนด้วยเมาส์
 ## Task 2.3  — Movement: เดิน 8 ทิศ ตามทิศกล้อง (W = เดินไปทางที่กล้องมอง)
 ## Task 2.4  — Camera: เมาส์หมุนกล้องรอบตัว / ลูกกลิ้งซูม / Esc ปล่อยเมาส์
 ## Task 2.7 / 2.8 — HealthComponent และ StaminaComponent
@@ -12,7 +12,7 @@ extends CharacterBody3D
 ## Task 2.12 — Combat Feedback: รอยดาบ / กล้องสั่น / โดนตีแล้วกระเด็นและชะงัก (Hitstop + ประกายไฟอยู่ใน hitbox.gd)
 ## ตาย → หน้าจอ YOU DIED → กด R เกิดใหม่ที่จุดเริ่ม (ศัตรูรีเซ็ตด้วย)
 ## Task 3.1 — อาวุธอ่านจาก WeaponData (data/weapons/*.tres) + โมเดลอาวุธที่ถือ
-## Task 2.6 — ภาพ Pixel 8 ทิศ + ท่ายืน/เดิน/โจมตี/หลบ/โดนตี (SpriteAnimator)
+## Task 2.6 — โมเดล 3D Low-poly (PlayerModel): เดิน/เอนตัว/บิดตัว และมือจับอาวุธตามท่าของอาวุธแต่ละชนิด (CR-014)
 ## Task 3.6 — เปลี่ยนอาวุธ: ปุ่ม 1 = ดาบ, 2 = หอก (ชั่วคราว จนกว่าจะมี Input Map)
 ## Task 3.7 — ท่าโจมตีเป็นคอมโบ (AttackMove): ฟัน/ปัด หรือ แทง แต่ละท่ามี Hitbox และเอฟเฟกต์ของตัวเอง
 
@@ -98,15 +98,7 @@ const TINT_RECOVERY := Color(0.55, 0.55, 0.6, 1)
 const TINT_DEAD := Color(0.35, 0.35, 0.35, 1)
 const TINT_PARRY := Color(0.6, 0.85, 1.6, 1)
 const DEATH_SCREEN := preload("res://scenes/ui/death_screen.tscn")
-const SPRITE_SHEET_PATH := "res://assets/sprites/placeholder/player_sheet.png"
-## ท่าใน Sheet (ลำดับแถว) — ดู scripts/systems/sprite_animator.gd
-const ANIMS := {
-	&"idle": {"row": 0, "frames": 2, "fps": 2.5},
-	&"walk": {"row": 1, "frames": 4, "fps": 9.0},
-	&"attack": {"row": 2, "frames": 2, "fps": 0.0},
-	&"dodge": {"row": 3, "frames": 1, "fps": 0.0},
-	&"hurt": {"row": 4, "frames": 1, "fps": 0.0},
-}
+
 
 var state: State = State.NORMAL
 ## ทิศที่ตัวละครหัน (แนวราบ, ความยาว 1)
@@ -125,7 +117,8 @@ var _weapon_root: Node3D
 var _swing_pivot: Node3D
 var _weapon_model: Node3D
 
-var _anim: SpriteAnimator
+## มุมกวาดอาวุธล่าสุด (องศา) — ใช้บิดลำตัวตาม
+var _swing_yaw_deg: float = 0.0
 var _hitbox_box: BoxShape3D
 var _hitbox_shape: CollisionShape3D
 
@@ -146,7 +139,7 @@ var _buffer_left: int = 0
 @onready var health: HealthComponent = $HealthComponent
 @onready var stamina: StaminaComponent = $StaminaComponent
 @onready var hitbox: Hitbox = $Hitbox
-@onready var body: Sprite3D = $Sprite3D
+@onready var body: PlayerModel = $Model
 @onready var facing_arrow: Node3D = $FacingArrow
 @onready var camera_pivot: Node3D = $CameraPivot
 @onready var spring_arm: SpringArm3D = $CameraPivot/SpringArm3D
@@ -155,7 +148,6 @@ var _buffer_left: int = 0
 
 func _ready() -> void:
 	add_to_group("player")
-	_anim = SpriteAnimator.new(body, load(SPRITE_SHEET_PATH), 4, ANIMS)
 	_spawn_pos = global_position
 	_death_screen = DEATH_SCREEN.instantiate()
 	add_child(_death_screen)
@@ -174,8 +166,7 @@ func _ready() -> void:
 func _create_weapon_rig() -> void:
 	_weapon_root = Node3D.new()
 	_weapon_root.name = "WeaponRoot"
-	_weapon_root.position = Vector3(0, 0.75, 0)   # ระดับอก
-	add_child(_weapon_root)
+	body.add_child(_weapon_root)                  # อาวุธหมุนตามตัวโมเดล
 	_swing_pivot = Node3D.new()
 	_swing_pivot.name = "SwingPivot"
 	_weapon_root.add_child(_swing_pivot)
@@ -195,6 +186,7 @@ func equip(data: WeaponData) -> void:
 	if _weapon_model:
 		_weapon_model.queue_free()
 		_weapon_model = null
+	_weapon_root.position = data.hold_offset
 	if data.model_scene:
 		_weapon_model = data.model_scene.instantiate()
 		_swing_pivot.add_child(_weapon_model)
@@ -232,6 +224,7 @@ func current_move_name() -> String:
 
 
 func _set_pose(yaw_deg: float, pitch_deg: float) -> void:
+	_swing_yaw_deg = yaw_deg
 	_swing_pivot.rotation = Vector3(deg_to_rad(pitch_deg), deg_to_rad(yaw_deg), 0.0)
 
 
@@ -362,22 +355,48 @@ func _state_hitstun() -> void:
 		state = State.NORMAL
 
 
-# ---------------- ภาพตัวละคร (Animation) ----------------
-func _update_animation(delta: float) -> void:
+# ---------------- ท่าทางโมเดล ----------------
+func _update_model(delta: float) -> void:
+	if state == State.DEAD:
+		return
+	# หันตัวตามทิศ — ตอนโจมตี/Parry หันเร็ว ตอนเดินหันนุ่ม ๆ
+	var target_yaw: float = atan2(-facing.x, -facing.z)
+	var turn_speed: float = 30.0 if state in [State.ATTACK, State.PARRY] else 14.0
+	body.rotation.y = lerp_angle(body.rotation.y, target_yaw, 1.0 - exp(-turn_speed * delta))
+
+	var speed: float = Vector2(velocity.x, velocity.z).length()
+	var lean: float = 0.0
+	var crouch: float = 0.0
+	var twist: float = 0.0
 	match state:
 		State.NORMAL:
-			var speed: float = Vector2(velocity.x, velocity.z).length()
-			_anim.play(&"walk" if speed > 0.3 else &"idle")
+			lean = -0.1 * clampf(speed / walk_speed, 0.0, 1.0)
 		State.ATTACK:
-			# เฟรม 0 = ง้าง, เฟรม 1 = ฟัน/แทง (ผูกกับ Frame Data ของท่า)
-			_anim.play(&"attack", 0 if _state_frame <= _move.startup_frames else 1)
-		State.PARRY:
-			_anim.play(&"attack", 0)
+			speed = 0.0
+			if _move and _move.kind == AttackMove.Kind.THRUST:
+				lean = 0.1 if _state_frame <= _move.startup_frames else -0.25   # ง้างเอนหลัง → แทงพุ่งตัว
+			else:
+				twist = deg_to_rad(_swing_yaw_deg) * 0.45                     # บิดลำตัวตามดาบ
+				lean = -0.08
 		State.DODGE:
-			_anim.play(&"dodge")
-		State.HITSTUN, State.DEAD:
-			_anim.play(&"hurt")
-	_anim.update(delta, facing)
+			speed = 0.0
+			lean = -0.6
+			crouch = 0.16
+		State.PARRY:
+			lean = 0.08
+			crouch = 0.06
+		State.HITSTUN:
+			speed = 0.0
+			lean = 0.35
+
+	# มือจับอาวุธ: มือขวาที่ด้าม / มือซ้ายจับถัดขึ้นไป (อาวุธสองมือ)
+	var right: Variant = null
+	var left: Variant = null
+	if _weapon_model and _weapon_model.visible:
+		right = _weapon_model.global_position
+		if weapon.two_handed:
+			left = _weapon_model.to_global(Vector3(0, 0, -weapon.off_hand_offset))
+	body.update_pose(delta, speed, lean, crouch, twist, right, left)
 
 
 # ---------------- กล้องสั่น ----------------
@@ -387,7 +406,7 @@ func shake(amount: float) -> void:
 
 
 func _process(delta: float) -> void:
-	_update_animation(delta)
+	_update_model(delta)
 	if _shake > 0.0:
 		camera.h_offset = randf_range(-1.0, 1.0) * _shake
 		camera.v_offset = randf_range(-1.0, 1.0) * _shake
@@ -469,8 +488,7 @@ func _update_facing_visual() -> void:
 	var yaw: float = atan2(-facing.x, -facing.z)
 	facing_arrow.rotation.y = yaw
 	hitbox.rotation.y = yaw
-	if _weapon_root:
-		_weapon_root.rotation.y = yaw
+
 
 
 # ---------------- INPUT BUFFER ----------------
@@ -659,11 +677,10 @@ func _on_died() -> void:
 	hitbox.deactivate()
 	_set_horizontal(Vector3.ZERO)
 	HitStop.apply(0.3, 0.7)                 # ช้าลงตอนล้ม ให้รู้ว่าตายแล้ว
-	# ล้มลง: ยุบตัว จมลงพื้น สีเทา
+	# ล้มหงายหลัง
 	var t := create_tween().set_parallel(true)
 	t.tween_property(body, "modulate", TINT_DEAD, 0.4)
-	t.tween_property(body, "scale", Vector3(1.25, 0.35, 1.0), 0.35).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
-	t.tween_property(body, "position:y", 0.3, 0.35)
+	t.tween_property(body, "rotation:x", 1.45, 0.5).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 	await get_tree().create_timer(0.6, true, false, true).timeout
 	if state == State.DEAD:
 		_death_screen.show_death()
@@ -679,7 +696,7 @@ func respawn() -> void:
 	stamina.restore(stamina.max_stamina)
 	body.modulate = TINT_NORMAL
 	body.scale = Vector3.ONE
-	body.position.y = 0.75
+	body.rotation.x = 0.0
 	state = State.NORMAL
 	_state_frame = 0
 	_buffered_action = &""

@@ -30,3 +30,5 @@ parry_pose = Vector2(-15, 35)
 slash_color = Color(1, 0.97, 0.8, 1)
 moves = Array[Resource]([SubResource("Move_slash")])
 model_scene = ExtResource("3_model")
+hold_offset = Vector3(0.16, 0.85, 0)
+two_handed = false

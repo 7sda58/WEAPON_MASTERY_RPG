@@ -16,6 +16,12 @@ extends Resource
 @export_group("Model")
 ## โมเดลอาวุธที่ถือ (จุดจับอยู่ที่ 0,0,0 ปลายชี้ไปทาง -Z)
 @export var model_scene: PackedScene
+## จุดหมุนของอาวุธเทียบกับเท้าตัวละคร (เมตร) — x บวก = ทางขวา
+@export var hold_offset: Vector3 = Vector3(0.14, 0.85, 0.0)
+## ถือสองมือ (มือซ้ายจับด้ามถัดขึ้นไป)
+@export var two_handed: bool = false
+## มือซ้ายจับห่างจากมือขวาไปทางปลายอาวุธกี่เมตร
+@export var off_hand_offset: float = 0.45
 ## ตำแหน่งมือจับเทียบกับกลางอก (เมตร)
 @export var grip_offset: Vector3 = Vector3(0, 0, -0.22)
 ## ท่าถือปกติ (องศา): x = หันซ้าย-ขวา, y = ก้ม-เงย

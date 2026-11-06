@@ -5,7 +5,7 @@
 [ext_resource type="Script" uid="uid://bxtt5yod824rp" path="res://scripts/systems/stamina_component.gd" id="3_stamina"]
 [ext_resource type="Script" uid="uid://jd5ntudx72d2" path="res://scripts/systems/hitbox.gd" id="4_hitbox"]
 [ext_resource type="PackedScene" uid="uid://iy6fx8pkwjeq" path="res://scenes/ui/debug_hud.tscn" id="5_hud"]
-[ext_resource type="Texture2D" path="res://assets/sprites/placeholder/player_placeholder.png" id="6_tex"]
+[ext_resource type="PackedScene" uid="uid://nf75j17vb2xd" path="res://scenes/characters/player_model.tscn" id="6_model"]
 
 [sub_resource type="CapsuleShape3D" id="Shape_body"]
 radius = 0.3
@@ -41,15 +41,10 @@ script = ExtResource("1_player")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.65, 0)
 shape = SubResource("Shape_body")
 
-[node name="Sprite3D" type="Sprite3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
-pixel_size = 0.0625
-billboard = 2
-alpha_cut = 3
-texture_filter = 0
-texture = ExtResource("6_tex")
+[node name="Model" parent="." instance=ExtResource("6_model")]
 
 [node name="FacingArrow" type="Node3D" parent="."]
+visible = false
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="FacingArrow"]
 transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.06, -0.65)
