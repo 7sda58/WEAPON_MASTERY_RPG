@@ -1,22 +1,28 @@
 class_name Player
-extends CharacterBody2D
-## ตัวละครผู้เล่น
-## Task 2.3  — Movement: เดิน 8 ทิศ ความเร็วแนวทแยงเท่าแนวตรง
+extends CharacterBody3D
+## ตัวละครผู้เล่น — ภาพ Pixel (Sprite3D) ในโลก 3D, กล้องบุคคลที่ 3 หมุนด้วยเมาส์
+## Task 2.3  — Movement: เดิน 8 ทิศ ตามทิศกล้อง (W = เดินไปทางที่กล้องมอง)
+## Task 2.4  — Camera: เมาส์หมุนกล้องรอบตัว / ลูกกลิ้งซูม / Esc ปล่อยเมาส์
 ## Task 2.7 / 2.8 — HealthComponent และ StaminaComponent
-## Task 2.9  — Basic Attack: นับเวลาเป็นเฟรม (60 เฟรม = 1 วินาที) / เล็งด้วยเมาส์ (Task 1.2)
-## Task 2.11 — Dodge: พุ่งหลบพร้อม i-frame (ช่วงอมตะ)
-## Task 2.13 — Input Buffer: กดปุ่มล่วงหน้าระหว่างท่าได้ ท่าถัดไปจะออกทันทีที่ว่าง
+## Task 2.9  — Basic Attack: นับเวลาเป็นเฟรม (60 เฟรม = 1 วินาที) ฟันไปทางที่กล้องมอง
+## Task 2.11 — Dodge: พุ่งหลบพร้อม i-frame
+## Task 2.13 — Input Buffer: กดปุ่มล่วงหน้าระหว่างท่าได้
 
 enum State { NORMAL, ATTACK, DODGE, DEAD }
 
-## ความเร็วเดิน (พิกเซลต่อวินาที)
-@export var walk_speed: float = 90.0
+## ความเร็วเดิน (เมตรต่อวินาที)
+@export var walk_speed: float = 4.0
 
-@export_group("Aim")
-## true = โจมตีไปทางเมาส์ | false = โจมตีไปทางที่เดินอยู่
-@export var aim_with_mouse: bool = true
-## true = ล็อกทิศโจมตีเป็น 8 ทิศ | false = เล็งได้ทุกองศา
-@export var snap_aim_8_directions: bool = false
+@export_group("Camera")
+@export var mouse_sensitivity: float = 0.0025
+## มุมก้มกล้องสูงสุด/ต่ำสุด (องศา, ค่าลบ = มองลง)
+@export var min_pitch_deg: float = -75.0
+@export var max_pitch_deg: float = -8.0
+@export var min_zoom: float = 3.0
+@export var max_zoom: float = 12.0
+@export var zoom_step: float = 0.6
+## true = ฟันไปทางที่กล้องมอง | false = ฟันไปทางที่ตัวละครหันอยู่
+@export var attack_toward_camera: bool = true
 
 @export_group("Basic Attack (หน่วย: เฟรม)")
 ## ช่วงง้าง — ยังไม่โดน
@@ -29,15 +35,13 @@ enum State { NORMAL, ATTACK, DODGE, DEAD }
 @export var attack_stamina_cost: float = 15.0
 
 @export_group("Dodge (หน่วย: เฟรม)")
-## ความเร็วตอนพุ่ง (พิกเซลต่อวินาที)
-@export var dodge_speed: float = 210.0
-## จำนวนเฟรมที่พุ่ง — 14 เฟรม × 210 ≈ 49 พิกเซล
+## ความเร็วตอนพุ่ง (เมตรต่อวินาที) — 14 เฟรม × 9 ≈ 2.1 เมตร
+@export var dodge_speed: float = 9.0
 @export var dodge_move_frames: int = 14
 ## หยุดนิ่งหลังพุ่ง ก่อนกลับมาขยับได้
 @export var dodge_recovery: int = 6
-## เฟรมแรกที่อมตะ
+## ช่วงอมตะ (เฟรมที่ iframe_start ถึง iframe_end)
 @export var iframe_start: int = 2
-## เฟรมสุดท้ายที่อมตะ — i-frame ยาว 10 เฟรม (≈0.17 วินาที)
 @export var iframe_end: int = 11
 @export var dodge_stamina_cost: float = 20.0
 
@@ -45,32 +49,74 @@ enum State { NORMAL, ATTACK, DODGE, DEAD }
 ## จำปุ่มที่กดล่วงหน้าไว้กี่เฟรม (6 เฟรม = 0.1 วินาที)
 @export var input_buffer_frames: int = 6
 
-var state: State = State.NORMAL
-## ทิศที่ตัวละครหันอยู่ — ใช้กำหนดทิศโจมตี
-var facing: Vector2 = Vector2.DOWN
-var _state_frame: int = 0
-var _dodge_dir: Vector2 = Vector2.ZERO
-var _base_color: Color
+const TINT_NORMAL := Color(1, 1, 1, 1)
+const TINT_STARTUP := Color(1, 1, 0.45, 1)
+const TINT_RECOVERY := Color(0.55, 0.55, 0.6, 1)
+const TINT_DEAD := Color(0.35, 0.35, 0.35, 1)
 
-## Input Buffer — ปุ่มล่าสุดที่กดและเวลาที่เหลือ
+var state: State = State.NORMAL
+## ทิศที่ตัวละครหัน (แนวราบ, ความยาว 1)
+var facing: Vector3 = Vector3.FORWARD
+var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
+var _state_frame: int = 0
+var _dodge_dir: Vector3 = Vector3.ZERO
+## กันไม่ให้คลิกที่ใช้จับเมาส์กลับเข้าเกม กลายเป็นการฟัน
+var _ignore_attack_frames: int = 0
+
 var _buffered_action: StringName = &""
 var _buffer_left: int = 0
 
 @onready var health: HealthComponent = $HealthComponent
 @onready var stamina: StaminaComponent = $StaminaComponent
 @onready var hitbox: Hitbox = $Hitbox
-@onready var body: ColorRect = $ColorRect
+@onready var body: Sprite3D = $Sprite3D
+@onready var facing_arrow: Node3D = $FacingArrow
+@onready var camera_pivot: Node3D = $CameraPivot
+@onready var spring_arm: SpringArm3D = $CameraPivot/SpringArm3D
 
 
 func _ready() -> void:
 	add_to_group("player")
-	_base_color = body.color
+	spring_arm.add_excluded_object(get_rid())  # กล้องไม่ชนตัวผู้เล่นเอง
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	health.health_changed.connect(_on_health_changed)
 	health.damaged.connect(_on_damaged)
 	health.died.connect(_on_died)
 
 
-func _physics_process(_delta: float) -> void:
+# ---------------- กล้องและเมาส์ ----------------
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		camera_pivot.rotation.y -= event.relative.x * mouse_sensitivity
+		spring_arm.rotation.x = clampf(spring_arm.rotation.x - event.relative.y * mouse_sensitivity,
+			deg_to_rad(min_pitch_deg), deg_to_rad(max_pitch_deg))
+	elif event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			spring_arm.spring_length = maxf(min_zoom, spring_arm.spring_length - zoom_step)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			spring_arm.spring_length = minf(max_zoom, spring_arm.spring_length + zoom_step)
+		elif Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED  # คลิกในเกม = จับเมาส์กลับ
+			_ignore_attack_frames = 2
+	elif event.is_action_pressed("ui_cancel"):
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE  # Esc = ปล่อยเมาส์
+	else:
+		_debug_input(event)
+
+
+## ทิศ "ไปข้างหน้า" ของกล้อง บนพื้นราบ
+func _camera_forward() -> Vector3:
+	return Vector3.FORWARD.rotated(Vector3.UP, camera_pivot.global_rotation.y)
+
+
+## แปลงปุ่ม WASD เป็นทิศบนพื้น ตามมุมกล้อง — ความยาวไม่เกิน 1 (แนวทแยงไม่เร็วกว่า)
+func _get_move_dir() -> Vector3:
+	var input: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	return Vector3(input.x, 0.0, input.y).rotated(Vector3.UP, camera_pivot.global_rotation.y)
+
+
+# ---------------- ลูปหลัก ----------------
+func _physics_process(delta: float) -> void:
 	_update_input_buffer()
 	match state:
 		State.NORMAL:
@@ -80,14 +126,33 @@ func _physics_process(_delta: float) -> void:
 		State.DODGE:
 			_state_dodge()
 		State.DEAD:
-			velocity = Vector2.ZERO
+			_set_horizontal(Vector3.ZERO)
+	if not is_on_floor():
+		velocity.y -= gravity * delta
 	move_and_slide()
+	_update_facing_visual()
+
+
+func _set_horizontal(v: Vector3) -> void:
+	velocity.x = v.x
+	velocity.z = v.z
+
+
+## หมุนลูกศรใต้เท้าและ Hitbox ไปตามทิศที่หัน
+func _update_facing_visual() -> void:
+	var yaw: float = atan2(-facing.x, -facing.z)
+	facing_arrow.rotation.y = yaw
+	hitbox.rotation.y = yaw
 
 
 # ---------------- INPUT BUFFER ----------------
 func _update_input_buffer() -> void:
+	if _ignore_attack_frames > 0:
+		_ignore_attack_frames -= 1
 	for action: StringName in [&"attack", &"dodge"]:
-		if Input.is_action_just_pressed(action):
+		if Input.is_action_just_pressed(action) and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			if action == &"attack" and _ignore_attack_frames > 0:
+				continue
 			_buffered_action = action
 			_buffer_left = input_buffer_frames
 	if _buffer_left > 0:
@@ -96,7 +161,6 @@ func _update_input_buffer() -> void:
 			_buffered_action = &""
 
 
-## ดึงปุ่มที่จำไว้ออกมาใช้ (ใช้แล้วล้างทิ้ง)
 func _consume_buffer(action: StringName) -> bool:
 	if _buffered_action == action and _buffer_left > 0:
 		_buffered_action = &""
@@ -107,11 +171,11 @@ func _consume_buffer(action: StringName) -> bool:
 
 # ---------------- NORMAL: ยืน / เดิน ----------------
 func _state_normal() -> void:
-	var input_dir: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var move_dir: Vector3 = _get_move_dir()
 
 	if _consume_buffer(&"dodge"):
 		if stamina.try_spend(dodge_stamina_cost):
-			_start_dodge(input_dir)
+			_start_dodge(move_dir)
 			return
 		print("Stamina ไม่พอสำหรับหลบ")
 
@@ -121,76 +185,64 @@ func _state_normal() -> void:
 			return
 		print("Stamina ไม่พอสำหรับโจมตี")
 
-	# get_vector จำกัดความยาวไม่เกิน 1 — เดินแนวทแยงไม่เร็วกว่าแนวตรง
-	velocity = input_dir * walk_speed
-	if input_dir != Vector2.ZERO:
-		facing = input_dir.normalized()
+	_set_horizontal(move_dir * walk_speed)
+	if move_dir.length() > 0.05:
+		facing = move_dir.normalized()
 
 
 # ---------------- ATTACK: Startup → Active → Recovery ----------------
 func _start_attack() -> void:
 	state = State.ATTACK
 	_state_frame = 0
-	velocity = Vector2.ZERO
-	if aim_with_mouse:
-		facing = _get_mouse_direction()  # หันตัวไปทางเมาส์ก่อนฟัน
+	_set_horizontal(Vector3.ZERO)
+	if attack_toward_camera:
+		facing = _camera_forward()  # หันไปทางที่กล้องมองก่อนฟัน
 	hitbox.damage = attack_damage
-	hitbox.rotation = facing.angle()  # หมุน Hitbox ไปทางที่หันอยู่
-
-
-## ทิศจากตัวละครไปยังเมาส์ (วัดจากจุดกลางลำตัว ไม่ใช่เท้า)
-func _get_mouse_direction() -> Vector2:
-	var dir: Vector2 = get_global_mouse_position() - hitbox.global_position
-	if dir.length() < 1.0:
-		return facing  # เมาส์อยู่บนตัวพอดี — ใช้ทิศเดิม
-	if snap_aim_8_directions:
-		dir = Vector2.RIGHT.rotated(snappedf(dir.angle(), PI / 4.0))
-	return dir.normalized()
+	_update_facing_visual()
 
 
 func _state_attack() -> void:
 	_state_frame += 1
-	velocity = Vector2.ZERO
+	_set_horizontal(Vector3.ZERO)
 
 	var active_start: int = attack_startup + 1
 	var active_end: int = attack_startup + attack_active + 1
 	var total: int = attack_startup + attack_active + attack_recovery
 
 	if _state_frame < active_start:
-		body.color = _base_color.lerp(Color.YELLOW, 0.6)   # Startup: ตัวออกเหลือง
+		body.modulate = TINT_STARTUP        # Startup: ตัวออกเหลือง
 	elif _state_frame == active_start:
-		body.color = _base_color
-		hitbox.activate()                                  # Active: เปิด Hitbox
+		body.modulate = TINT_NORMAL
+		hitbox.activate()                   # Active: เปิด Hitbox
 	elif _state_frame == active_end:
 		hitbox.deactivate()
-		body.color = _base_color.darkened(0.4)            # Recovery: ตัวออกเข้ม
+		body.modulate = TINT_RECOVERY       # Recovery: ตัวออกเข้ม
 
 	if _state_frame >= total:
-		body.color = _base_color
+		body.modulate = TINT_NORMAL
 		state = State.NORMAL
 
 
 # ---------------- DODGE: พุ่ง (มี i-frame) → Recovery ----------------
-func _start_dodge(input_dir: Vector2) -> void:
+func _start_dodge(move_dir: Vector3) -> void:
 	state = State.DODGE
 	_state_frame = 0
 	# หลบไปทางที่กดเดินอยู่ — ถ้ายืนนิ่งให้ถอยหลังจากทิศที่หัน
-	_dodge_dir = input_dir.normalized() if input_dir != Vector2.ZERO else -facing
+	_dodge_dir = move_dir.normalized() if move_dir.length() > 0.05 else -facing
 
 
 func _state_dodge() -> void:
 	_state_frame += 1
 
-	# i-frame: อมตะเฉพาะช่วงที่กำหนด — ตัวโปร่งให้เห็น
 	var invincible: bool = _state_frame >= iframe_start and _state_frame <= iframe_end
 	health.invincible = invincible
-	body.modulate.a = 0.35 if invincible else 1.0
+	body.modulate = Color(1, 1, 1, 0.4) if invincible else TINT_NORMAL
 
 	if _state_frame <= dodge_move_frames:
-		velocity = _dodge_dir * dodge_speed
+		_set_horizontal(_dodge_dir * dodge_speed)
 	else:
-		velocity = Vector2.ZERO
-		body.color = _base_color.darkened(0.4)            # Recovery: ตัวออกเข้ม
+		_set_horizontal(Vector3.ZERO)
+		body.modulate = TINT_RECOVERY
 
 	if _state_frame >= dodge_move_frames + dodge_recovery:
 		_end_dodge()
@@ -199,8 +251,7 @@ func _state_dodge() -> void:
 
 func _end_dodge() -> void:
 	health.invincible = false
-	body.modulate.a = 1.0
-	body.color = _base_color
+	body.modulate = TINT_NORMAL
 
 
 # ---------------- โดนตี / ตาย ----------------
@@ -217,16 +268,16 @@ func _on_died() -> void:
 	_end_dodge()
 	state = State.DEAD
 	hitbox.deactivate()
-	body.color = Color(0.4, 0.4, 0.4)  # ชั่วคราว จนกว่าจะมีระบบตายจริงในข้อ 23
+	body.modulate = TINT_DEAD  # ชั่วคราว จนกว่าจะมีระบบตายจริง
 
 
-# ---------------- DEBUG (ลบออกเมื่อมีศัตรูตีกลับและ HUD) ----------------
+# ---------------- DEBUG (ลบออกเมื่อมีศัตรูตีกลับ) ----------------
 # F1 = โดนดาเมจ 15 | F2 = ใช้ Stamina 30 | F3 = ฟื้น HP เต็ม
 # F4 = เปิด/ปิด "ดาเมจอัตโนมัติทุก 1 วินาที" ไว้ฝึกจับจังหวะหลบ
 var _debug_pulse: Timer
 
 
-func _unhandled_input(event: InputEvent) -> void:
+func _debug_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
 			KEY_F1:
@@ -237,7 +288,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_F3:
 				health.reset()
 				state = State.NORMAL
-				body.color = _base_color
+				body.modulate = TINT_NORMAL
 			KEY_F4:
 				_toggle_debug_pulse()
 

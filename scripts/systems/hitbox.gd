@@ -1,12 +1,12 @@
 class_name Hitbox
-extends Area2D
+extends Area3D
 ## พื้นที่โจมตี — เปิดเฉพาะช่วง Active ของท่าโจมตี
 ## Task 2.10 — Hit Detection
 ## ตีโดน Hurtbox ได้ครั้งเดียวต่อการเปิดหนึ่งครั้ง (ไม่โดนซ้ำหลายเฟรม)
 
 @export var damage: int = 10
 
-var _already_hit: Array[Area2D] = []
+var _already_hit: Array[Area3D] = []
 
 
 func _ready() -> void:
@@ -29,13 +29,13 @@ func deactivate() -> void:
 	_set_visual(false)
 
 
-func _on_area_entered(area: Area2D) -> void:
+func _on_area_entered(area: Area3D) -> void:
 	if area is Hurtbox and not _already_hit.has(area):
 		_already_hit.append(area)
 		area.receive_hit(self)
 
 
-## แสดงกรอบสีเหลือง (ชั่วคราว จนกว่าจะมี Animation จริง)
+## แสดงกล่องสีเหลืองโปร่ง (ชั่วคราว จนกว่าจะมีเอฟเฟกต์จริง)
 func _set_visual(on: bool) -> void:
 	if has_node("Visual"):
 		$Visual.visible = on

@@ -1,5 +1,5 @@
 class_name Hurtbox
-extends Area2D
+extends Area3D
 ## พื้นที่รับการโจมตี — ส่งดาเมจต่อให้ HealthComponent
 ## Task 2.10 — Hit Detection
 
