@@ -60,7 +60,7 @@ modulate = Color(1, 1, 1, 0.75)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 5
 theme_override_font_sizes/font_size = 16
-text = "WASD move | Mouse look | LMB/J attack | Space dodge | Wheel zoom | Esc free mouse | F1-F4 debug"
+text = "WASD move | Mouse look | LMB/J attack | Space dodge | Wheel zoom | RMB/K parry | Esc free mouse"
 
 [node name="Crosshair" type="Label" parent="."]
 anchors_preset = 8

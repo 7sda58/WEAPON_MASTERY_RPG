@@ -1,0 +1,84 @@
+[gd_scene format=3 uid="uid://p8osn7biflqq"]
+
+[sub_resource type="BoxMesh" id="Mesh_Pommel"]
+size = Vector3(0.09, 0.09, 0.09)
+
+[sub_resource type="StandardMaterial3D" id="Mat_gold"]
+albedo_color = Color(0.95, 0.72, 0.2, 1)
+metallic = 0.7
+roughness = 0.35
+
+[sub_resource type="BoxMesh" id="Mesh_Grip"]
+size = Vector3(0.05, 0.05, 0.22)
+
+[sub_resource type="StandardMaterial3D" id="Mat_leather"]
+albedo_color = Color(0.42, 0.25, 0.14, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="Mesh_Guard"]
+size = Vector3(0.3, 0.06, 0.06)
+
+[sub_resource type="BoxMesh" id="Mesh_Gem"]
+size = Vector3(0.05, 0.07, 0.07)
+
+[sub_resource type="StandardMaterial3D" id="Mat_gem"]
+albedo_color = Color(0.2, 0.55, 1, 1)
+emission_enabled = true
+emission = Color(0.2, 0.5, 1, 1)
+emission_energy_multiplier = 0.6
+
+[sub_resource type="BoxMesh" id="Mesh_Blade"]
+size = Vector3(0.09, 0.025, 0.72)
+
+[sub_resource type="StandardMaterial3D" id="Mat_steel"]
+albedo_color = Color(0.78, 0.82, 0.88, 1)
+metallic = 0.85
+roughness = 0.3
+
+[sub_resource type="BoxMesh" id="Mesh_Edge"]
+size = Vector3(0.03, 0.03, 0.72)
+
+[sub_resource type="StandardMaterial3D" id="Mat_edge"]
+albedo_color = Color(0.88672304, 0, 0.28159863, 1)
+metallic = 0.6
+roughness = 0.15
+
+[sub_resource type="BoxMesh" id="Mesh_Tip"]
+size = Vector3(0.055, 0.022, 0.08)
+
+[node name="SwordModel" type="Node3D" unique_id=1476980206]
+
+[node name="Pommel" type="MeshInstance3D" parent="." unique_id=1782851162]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.15)
+mesh = SubResource("Mesh_Pommel")
+surface_material_override/0 = SubResource("Mat_gold")
+
+[node name="Grip" type="MeshInstance3D" parent="." unique_id=2031064389]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.02)
+mesh = SubResource("Mesh_Grip")
+surface_material_override/0 = SubResource("Mat_leather")
+
+[node name="Guard" type="MeshInstance3D" parent="." unique_id=1014194080]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.11)
+mesh = SubResource("Mesh_Guard")
+surface_material_override/0 = SubResource("Mat_gold")
+
+[node name="Gem" type="MeshInstance3D" parent="." unique_id=452363850]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.11)
+mesh = SubResource("Mesh_Gem")
+surface_material_override/0 = SubResource("Mat_gem")
+
+[node name="Blade" type="MeshInstance3D" parent="." unique_id=643706634]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.5053432)
+mesh = SubResource("Mesh_Blade")
+surface_material_override/0 = SubResource("Mat_steel")
+
+[node name="Edge" type="MeshInstance3D" parent="." unique_id=72940653]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.5)
+mesh = SubResource("Mesh_Edge")
+surface_material_override/0 = SubResource("Mat_edge")
+
+[node name="Tip" type="MeshInstance3D" parent="." unique_id=1588535447]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.9)
+mesh = SubResource("Mesh_Tip")
+surface_material_override/0 = SubResource("Mat_steel")

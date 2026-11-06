@@ -18,8 +18,8 @@ func _process(_delta: float) -> void:
 	hp_fill.size.x = BAR_WIDTH * hp_ratio
 	st_fill.size.x = BAR_WIDTH * st_ratio
 	# Stamina ไม่พอโจมตี → แถบเป็นสีส้ม
-	st_fill.color = Color(0.95, 0.85, 0.2) if p.stamina.has_enough(p.attack_stamina_cost) else Color(1, 0.45, 0.1)
-	info.text = "HP %d/%d   ST %d/%d   %s%s" % [
-		p.health.current_health, p.health.max_health,
+	st_fill.color = Color(0.95, 0.85, 0.2) if p.stamina.has_enough(p.weapon.stamina_cost) else Color(1, 0.45, 0.1)
+	info.text = "%s   HP %d/%d   ST %d/%d   %s%s" % [
+		p.weapon.display_name, p.health.current_health, p.health.max_health,
 		int(p.stamina.current_stamina), int(p.stamina.max_stamina),
 		Player.State.keys()[p.state], "   INV" if p.health.invincible else ""]

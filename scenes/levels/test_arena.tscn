@@ -91,6 +91,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 shape = SubResource("Shape_ground")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Ground" unique_id=1702863718]
+transform = Transform3D(0.9999889, 0.003997436, -0.0024823812, -0.0039920015, 0.9999896, 0.0021872986, 0.002491111, -0.0021773512, 0.9999945, 0, 0, 0)
 mesh = SubResource("Mesh_ground")
 
 [node name="WallN" type="StaticBody3D" parent="." unique_id=1639813055]

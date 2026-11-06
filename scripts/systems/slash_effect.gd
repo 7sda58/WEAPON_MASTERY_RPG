@@ -24,7 +24,7 @@ static func spawn(parent: Node3D, local_pos: Vector3, yaw: float, color: Color =
 	s.scale = Vector3.ONE * 0.75
 	var t := s.create_tween().set_parallel(true)
 	t.tween_property(s, "scale", Vector3.ONE * 1.1, 0.16).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	t.tween_property(s, "rotation:y", yaw - 0.5, 0.16)                  # กวาดไปด้านข้าง
+	t.tween_property(s, "rotation:y", yaw + 0.5, 0.16)                  # กวาดจากขวาไปซ้าย (ตามดาบ)
 	t.tween_property(mat, "albedo_color:a", 0.0, 0.2).set_delay(0.04)
 	t.chain().tween_callback(s.queue_free)
 

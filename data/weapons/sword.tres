@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3 uid="uid://je8kylvhxeyj"]
+
+[ext_resource type="Script" uid="uid://foprn32ay64a" path="res://scripts/systems/weapon_data.gd" id="1_weapon"]
+[ext_resource type="PackedScene" uid="uid://p8osn7biflqq" path="res://scenes/weapons/sword_model.tscn" id="2_model"]
+
+[resource]
+script = ExtResource("1_weapon")
+id = &"sword"
+display_name = "Sword"
+startup_frames = 6
+active_frames = 4
+recovery_frames = 12
+damage = 10
+stamina_cost = 15.0
+reach = 0.85
+hitbox_size = Vector3(1.1, 1.2, 1)
+model_scene = ExtResource("2_model")
+windup_angle = -95.0
+swing_end_angle = 85.0
+hitstop_seconds = 0.06
+slash_color = Color(1, 0.97, 0.8, 1)
