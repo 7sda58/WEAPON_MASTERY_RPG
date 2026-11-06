@@ -1,21 +1,32 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3 uid="uid://je8kylvhxeyj"]
+[gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://je8kylvhxeyj"]
 
 [ext_resource type="Script" uid="uid://foprn32ay64a" path="res://scripts/systems/weapon_data.gd" id="1_weapon"]
-[ext_resource type="PackedScene" uid="uid://p8osn7biflqq" path="res://scenes/weapons/sword_model.tscn" id="2_model"]
+[ext_resource type="Script" uid="uid://o2fbd0l31l6m" path="res://scripts/systems/attack_move.gd" id="2_move"]
+[ext_resource type="PackedScene" uid="uid://p8osn7biflqq" path="res://scenes/weapons/sword_model.tscn" id="3_model"]
 
-[resource]
-script = ExtResource("1_weapon")
-id = &"sword"
-display_name = "Sword"
+[sub_resource type="Resource" id="Move_slash"]
+script = ExtResource("2_move")
+move_name = "Slash"
+kind = 0
 startup_frames = 6
 active_frames = 4
 recovery_frames = 12
 damage = 10
 stamina_cost = 15.0
+hitstop_seconds = 0.06
 reach = 0.85
 hitbox_size = Vector3(1.1, 1.2, 1)
-model_scene = ExtResource("2_model")
-windup_angle = -95.0
-swing_end_angle = 85.0
-hitstop_seconds = 0.06
+sweep_from = -95.0
+sweep_to = 85.0
+
+[resource]
+script = ExtResource("1_weapon")
+id = &"sword"
+display_name = "Sword"
+combo_window_frames = 18
+grip_offset = Vector3(0, 0, -0.22)
+idle_pose = Vector2(-55, -55)
+parry_pose = Vector2(-15, 35)
 slash_color = Color(1, 0.97, 0.8, 1)
+moves = Array[Resource]([SubResource("Move_slash")])
+model_scene = ExtResource("3_model")

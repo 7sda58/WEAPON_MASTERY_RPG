@@ -11,7 +11,9 @@ extends CharacterBody3D
 ## Task 2.15 — Parry: กดตรงจังหวะ → ไม่เสียเลือด ศัตรูเสียหลัก (ตีแรง ×2)
 ## Task 2.12 — Combat Feedback: รอยดาบ / กล้องสั่น / โดนตีแล้วกระเด็นและชะงัก (Hitstop + ประกายไฟอยู่ใน hitbox.gd)
 ## ตาย → หน้าจอ YOU DIED → กด R เกิดใหม่ที่จุดเริ่ม (ศัตรูรีเซ็ตด้วย)
-## Task 3.1 — ค่าท่าโจมตีอ่านจาก WeaponData (data/weapons/*.tres) + โมเดลอาวุธที่ถือและท่าฟัน
+## Task 3.1 — อาวุธอ่านจาก WeaponData (data/weapons/*.tres) + โมเดลอาวุธที่ถือ
+## Task 3.6 — เปลี่ยนอาวุธ: ปุ่ม 1 = ดาบ, 2 = หอก (ชั่วคราว จนกว่าจะมี Input Map)
+## Task 3.7 — ท่าโจมตีเป็นคอมโบ (AttackMove): ฟัน/ปัด หรือ แทง แต่ละท่ามี Hitbox และเอฟเฟกต์ของตัวเอง
 
 enum State { NORMAL, ATTACK, DODGE, PARRY, HITSTUN, DEAD }
 
@@ -30,8 +32,13 @@ enum State { NORMAL, ATTACK, DODGE, PARRY, HITSTUN, DEAD }
 @export var attack_toward_camera: bool = true
 
 @export_group("Weapon")
-## อาวุธที่ถืออยู่ — ค่าเฟรม ดาเมจ ระยะ อยู่ในไฟล์นี้ (แก้ที่ data/weapons/sword.tres)
+## อาวุธที่ถืออยู่ — ท่าโจมตี ดาเมจ ระยะ อยู่ในไฟล์ .tres (data/weapons/)
 @export var weapon: WeaponData = preload("res://data/weapons/sword.tres")
+## อาวุธที่สลับได้ด้วยปุ่มตัวเลข (ลำดับ = ปุ่ม 1, 2, ...)
+@export var weapon_slots: Array[WeaponData] = [
+	preload("res://data/weapons/sword.tres"),
+	preload("res://data/weapons/spear.tres"),
+]
 
 @export_group("Dodge (หน่วย: เฟรม)")
 ## ความเร็วตอนพุ่ง (เมตรต่อวินาที) — 14 เฟรม × 9 ≈ 2.1 เมตร
@@ -108,10 +115,19 @@ var _weapon_root: Node3D
 var _swing_pivot: Node3D
 var _weapon_model: Node3D
 
-## ท่าถือดาบ (องศา): yaw = กวาดซ้าย-ขวา, pitch = ก้ม-เงย
-const POSE_IDLE := Vector2(-55.0, -55.0)      # ถือข้างตัวด้านขวา ปลายชี้ลงหน้า
-const POSE_SWING_PITCH := -8.0                # ตอนฟัน ใบดาบเกือบขนานพื้น
-const POSE_PARRY := Vector2(-15.0, 35.0)      # ยกดาบขึ้นตั้งรับด้านหน้า
+var _hitbox_box: BoxShape3D
+var _hitbox_shape: CollisionShape3D
+
+## คอมโบ: ท่าที่กำลังเล่น / ท่าถัดไป / กดต่อคอมโบไว้แล้วหรือยัง
+var _move: AttackMove
+var _move_index: int = 0
+var _combo_index: int = 0
+var _combo_queued: bool = false
+var _frames_since_attack: int = 999
+
+## ท่าถือ (องศา): x = หันซ้าย-ขวา, y = ก้ม-เงย
+const POSE_SWING_PITCH := -8.0                # ตอนฟัน ใบอาวุธเกือบขนานพื้น
+const POSE_THRUST := Vector2(0.0, -4.0)       # ตอนแทง ชี้ตรงไปข้างหน้า
 var _death_screen: CanvasLayer
 var _buffered_action: StringName = &""
 var _buffer_left: int = 0
@@ -153,16 +169,16 @@ func _create_weapon_rig() -> void:
 	_weapon_root.add_child(_swing_pivot)
 
 
-## ถืออาวุธ — ปรับขนาดและระยะ Hitbox ตามข้อมูลอาวุธ
+## ถืออาวุธ — เปลี่ยนโมเดล และรีเซ็ตคอมโบ
 func equip(data: WeaponData) -> void:
 	weapon = data
-	var shape_node := $Hitbox/CollisionShape3D as CollisionShape3D
-	var box := BoxShape3D.new()
-	box.size = data.hitbox_size
-	shape_node.shape = box
-	shape_node.position = Vector3(0, 0.75, -data.reach)
-	hitbox.damage = data.damage
-	hitbox.hitstop_seconds = data.hitstop_seconds
+	_combo_index = 0
+	_frames_since_attack = 999
+	if _hitbox_shape == null:
+		_hitbox_shape = $Hitbox/CollisionShape3D as CollisionShape3D
+		_hitbox_box = BoxShape3D.new()
+		_hitbox_shape.shape = _hitbox_box
+	_apply_move_hitbox(data.get_move(0))
 	# เปลี่ยนโมเดลอาวุธ
 	if _weapon_model:
 		_weapon_model.queue_free()
@@ -170,41 +186,88 @@ func equip(data: WeaponData) -> void:
 	if data.model_scene:
 		_weapon_model = data.model_scene.instantiate()
 		_swing_pivot.add_child(_weapon_model)
-		_weapon_model.position = Vector3(0, 0, -0.22)   # มือห่างจากกลางตัว
-	_set_pose(POSE_IDLE.x, POSE_IDLE.y)
+		_weapon_model.position = data.grip_offset
+	_set_pose(data.idle_pose.x, data.idle_pose.y)
+
+
+## ปรับ Hitbox ตามท่า — ขนาด ระยะ ดาเมจ Hitstop
+func _apply_move_hitbox(m: AttackMove) -> void:
+	_hitbox_box.size = m.hitbox_size
+	_hitbox_shape.position = Vector3(0, 0.75, -m.reach)
+	if has_node("Hitbox/Visual"):
+		var vis := $Hitbox/Visual as MeshInstance3D
+		vis.position = _hitbox_shape.position
+		vis.scale = m.hitbox_size / Vector3(1.1, 1.2, 1.0)
+	hitbox.damage = m.damage
+	hitbox.hitstop_seconds = m.hitstop_seconds
+
+
+## ท่าที่จะออกถ้ากดโจมตีตอนนี้ (ต่อคอมโบ หรือกลับไปท่าแรก)
+func _next_move_index() -> int:
+	if _frames_since_attack > weapon.combo_window_frames:
+		return 0
+	return _combo_index
+
+
+## Stamina ที่ท่าถัดไปต้องใช้ — HUD ใช้แสดงสีแถบ
+func next_attack_cost() -> float:
+	return weapon.get_move(_next_move_index()).stamina_cost
+
+
+## ชื่อท่าที่กำลังเล่น (สำหรับ HUD)
+func current_move_name() -> String:
+	return _move.move_name if (state == State.ATTACK and _move) else ""
 
 
 func _set_pose(yaw_deg: float, pitch_deg: float) -> void:
 	_swing_pivot.rotation = Vector3(deg_to_rad(pitch_deg), deg_to_rad(yaw_deg), 0.0)
 
 
-## ท่าถืออาวุธตามสถานะ — เรียกทุกเฟรม (Hitstop ทำให้ดาบค้างกลางท่าเองโดยอัตโนมัติ)
+## ท่าถืออาวุธตามสถานะ — เรียกทุกเฟรม (Hitstop ทำให้อาวุธค้างกลางท่าเองโดยอัตโนมัติ)
 func _update_weapon_pose() -> void:
 	if _weapon_model == null:
 		return
 	_weapon_model.visible = state != State.DEAD
-	match state:
-		State.ATTACK:
-			var s: int = weapon.startup_frames
-			var a: int = weapon.active_frames
-			var r: int = weapon.recovery_frames
-			var f: int = _state_frame
-			if f <= s:
-				# ง้าง: เหวี่ยงไปทางขวา-หลัง และยกใบดาบขึ้น
-				var t: float = ease(float(f) / s, 0.5)
-				_set_pose(lerpf(POSE_IDLE.x, weapon.windup_angle, t), lerpf(POSE_IDLE.y, POSE_SWING_PITCH, t))
-			elif f <= s + a:
-				# ฟัน: กวาดผ่านหน้าตัวไปทางซ้ายอย่างรวดเร็ว
-				var t: float = float(f - s) / a
-				_set_pose(lerpf(weapon.windup_angle, weapon.swing_end_angle, t), POSE_SWING_PITCH)
-			else:
-				# ฟื้นตัว: ค่อย ๆ กลับมาท่าถือ
-				var t: float = ease(float(f - s - a) / r, 2.0)
-				_set_pose(lerpf(weapon.swing_end_angle, POSE_IDLE.x, t), lerpf(POSE_SWING_PITCH, POSE_IDLE.y, t))
-		State.PARRY:
-			_set_pose(POSE_PARRY.x, POSE_PARRY.y)
-		_:
-			_set_pose(POSE_IDLE.x, POSE_IDLE.y)
+	var idle: Vector2 = weapon.idle_pose
+	var grip: Vector3 = weapon.grip_offset
+	_weapon_model.position = grip
+	if state == State.PARRY:
+		_set_pose(weapon.parry_pose.x, weapon.parry_pose.y)
+		return
+	if state != State.ATTACK or _move == null:
+		_set_pose(idle.x, idle.y)
+		return
+	var s: int = _move.startup_frames
+	var a: int = _move.active_frames
+	var r: int = _move.recovery_frames
+	var f: int = _state_frame
+	if _move.kind == AttackMove.Kind.THRUST:
+		# แทง: ดึงกลับ → พุ่งออกไปข้างหน้า → ดึงกลับมาท่าถือ
+		var back: float = grip.z + _move.thrust_pullback
+		var out: float = grip.z - _move.thrust_extend
+		if f <= s:
+			var t: float = ease(float(f) / s, 0.5)
+			_set_pose(lerpf(idle.x, POSE_THRUST.x, t), lerpf(idle.y, POSE_THRUST.y, t))
+			_weapon_model.position.z = lerpf(grip.z, back, t)
+		elif f <= s + a:
+			var t: float = ease(float(f - s) / a, 0.3)
+			_set_pose(POSE_THRUST.x, POSE_THRUST.y)
+			_weapon_model.position.z = lerpf(back, out, t)
+		else:
+			var t: float = ease(float(f - s - a) / r, 2.0)
+			_set_pose(lerpf(POSE_THRUST.x, idle.x, t), lerpf(POSE_THRUST.y, idle.y, t))
+			_weapon_model.position.z = lerpf(out, grip.z, t)
+	else:
+		# ฟัน/ปัด: ง้างไปด้านหนึ่ง → กวาดผ่านหน้าตัวไปอีกด้าน → กลับท่าถือ
+		if f <= s:
+			var t: float = ease(float(f) / s, 0.5)
+			_set_pose(lerpf(idle.x, _move.sweep_from, t), lerpf(idle.y, POSE_SWING_PITCH, t))
+		elif f <= s + a:
+			var t: float = float(f - s) / a
+			_set_pose(lerpf(_move.sweep_from, _move.sweep_to, t), POSE_SWING_PITCH)
+		else:
+			var t: float = ease(float(f - s - a) / r, 2.0)
+			_set_pose(lerpf(_move.sweep_to, idle.x, t), lerpf(POSE_SWING_PITCH, idle.y, t))
 
 
 ## สร้างพื้นที่รับดาเมจของผู้เล่น (Collision Layer 4 = ค่า 8) — Hitbox ของศัตรูจะมองหาชั้นนี้
@@ -265,6 +328,8 @@ func _take_hit(attacker: Hitbox) -> void:
 		return
 	hitbox.deactivate()
 	hurtbox.parry_active = false
+	_combo_queued = false
+	_frames_since_attack = 999
 	var away: Vector3 = global_position - attacker.global_position
 	away.y = 0.0
 	if away.length() < 0.01:
@@ -317,6 +382,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_ignore_attack_frames = 2
 	elif event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE  # Esc = ปล่อยเมาส์
+	elif event is InputEventKey and event.pressed and not event.echo:
+		# ปุ่ม 1–9 = สลับอาวุธ (เปลี่ยนได้เฉพาะตอนยืน/เดิน)
+		var slot: int = event.keycode - KEY_1
+		if slot >= 0 and slot < weapon_slots.size() and state == State.NORMAL:
+			if weapon_slots[slot] != weapon:
+				equip(weapon_slots[slot])
+				DamageNumber.spawn_text(get_tree().current_scene, global_position, weapon.display_name, Color(0.8, 1.0, 0.8))
 
 
 
@@ -352,6 +424,8 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_update_facing_visual()
 	_update_weapon_pose()
+	if state != State.ATTACK:
+		_frames_since_attack += 1
 
 
 func _set_horizontal(v: Vector3) -> void:
@@ -409,8 +483,9 @@ func _state_normal() -> void:
 		print("Stamina ไม่พอสำหรับ Parry")
 
 	if _consume_buffer(&"attack"):
-		if stamina.try_spend(weapon.stamina_cost):
-			_start_attack()
+		var idx: int = _next_move_index()
+		if stamina.try_spend(weapon.get_move(idx).stamina_cost):
+			_start_attack(idx)
 			return
 		print("Stamina ไม่พอสำหรับโจมตี")
 
@@ -420,13 +495,16 @@ func _state_normal() -> void:
 
 
 # ---------------- ATTACK: Startup → Active → Recovery ----------------
-func _start_attack() -> void:
+func _start_attack(index: int) -> void:
 	state = State.ATTACK
 	_state_frame = 0
+	_move_index = index % maxi(weapon.moves.size(), 1)
+	_move = weapon.get_move(_move_index)
+	_combo_queued = false
 	_set_horizontal(Vector3.ZERO)
 	if attack_toward_camera:
-		facing = _camera_forward()  # หันไปทางที่กล้องมองก่อนฟัน
-	hitbox.damage = weapon.damage
+		facing = _camera_forward()  # หันไปทางที่กล้องมองก่อนโจมตี
+	_apply_move_hitbox(_move)
 	_update_facing_visual()
 
 
@@ -434,23 +512,49 @@ func _state_attack() -> void:
 	_state_frame += 1
 	_set_horizontal(Vector3.ZERO)
 
-	var active_start: int = weapon.startup_frames + 1
-	var active_end: int = weapon.startup_frames + weapon.active_frames + 1
-	var total: int = weapon.total_frames()
+	var active_start: int = _move.startup_frames + 1
+	var active_end: int = _move.startup_frames + _move.active_frames + 1
+	var total: int = _move.total_frames()
 
 	if _state_frame < active_start:
 		body.modulate = TINT_STARTUP        # Startup: ตัวออกเหลือง
 	elif _state_frame == active_start:
 		body.modulate = TINT_NORMAL
 		hitbox.activate()                   # Active: เปิด Hitbox
-		SlashEffect.spawn(self, Vector3(0, 0.8, 0), atan2(-facing.x, -facing.z) - 0.25, weapon.slash_color)
+		_spawn_attack_effect()
 	elif _state_frame == active_end:
 		hitbox.deactivate()
 		body.modulate = TINT_RECOVERY       # Recovery: ตัวออกเข้ม
 
+	# ก้าวไปข้างหน้าระหว่างช่วง Active (เช่น หอกแทง)
+	if _state_frame >= active_start and _state_frame < active_end and _move.step_forward > 0.0:
+		_set_horizontal(facing * _move.step_forward)
+
+	# กดโจมตีระหว่าง Recovery = ต่อคอมโบ
+	if _state_frame >= active_end and _consume_buffer(&"attack"):
+		_combo_queued = true
+
 	if _state_frame >= total:
 		body.modulate = TINT_NORMAL
+		_combo_index = (_move_index + 1) % maxi(weapon.moves.size(), 1)
+		_frames_since_attack = 0
 		state = State.NORMAL
+		if _combo_queued:
+			_combo_queued = false
+			if stamina.try_spend(weapon.get_move(_combo_index).stamina_cost):
+				_start_attack(_combo_index)
+
+
+## เอฟเฟกต์ตามชนิดท่า: แทง = รอยพุ่งตรง, ฟัน/ปัด = รอยโค้งตามทิศกวาด
+func _spawn_attack_effect() -> void:
+	var yaw: float = atan2(-facing.x, -facing.z)
+	if _move.kind == AttackMove.Kind.THRUST:
+		var length: float = _move.reach + _move.hitbox_size.z * 0.5
+		SlashEffect.spawn_thrust(self, Vector3(0, 0.75, 0), yaw, length, weapon.slash_color)
+	else:
+		var sweep_sign: float = signf(_move.sweep_to - _move.sweep_from)
+		var size: float = maxf(_move.reach / 0.85, 1.0)
+		SlashEffect.spawn(self, Vector3(0, 0.8, 0), yaw - 0.25 * sweep_sign, weapon.slash_color, sweep_sign, size)
 
 
 # ---------------- DODGE: พุ่ง (มี i-frame) → Recovery ----------------
