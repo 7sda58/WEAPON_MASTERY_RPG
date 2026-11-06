@@ -18,11 +18,12 @@ reach = 1.75
 hitbox_size = Vector3(0.6, 1.0, 2.1)
 thrust_pullback = 0.4
 thrust_extend = 0.9
+two_handed = true
 step_forward = 2.5
 
 [sub_resource type="Resource" id="Move_sweep_left"]
 script = ExtResource("2_move")
-move_name = "Sweep Left"
+move_name = "Diagonal L-R"
 kind = 0
 startup_frames = 9
 active_frames = 6
@@ -32,12 +33,14 @@ stamina_cost = 16.0
 hitstop_seconds = 0.05
 reach = 1.2
 hitbox_size = Vector3(3.0, 1.0, 1.8)
-sweep_from = -110.0
-sweep_to = 90.0
+sweep_from = 100.0
+sweep_to = -85.0
+sweep_pitch_from = 45.0
+sweep_pitch_to = -35.0
 
 [sub_resource type="Resource" id="Move_sweep_right"]
 script = ExtResource("2_move")
-move_name = "Sweep Right"
+move_name = "Diagonal R-L"
 kind = 0
 startup_frames = 9
 active_frames = 6
@@ -47,8 +50,10 @@ stamina_cost = 16.0
 hitstop_seconds = 0.07
 reach = 1.2
 hitbox_size = Vector3(3.0, 1.0, 1.8)
-sweep_from = 110.0
-sweep_to = -90.0
+sweep_from = -100.0
+sweep_to = 85.0
+sweep_pitch_from = 45.0
+sweep_pitch_to = -35.0
 
 [resource]
 script = ExtResource("1_weapon")
@@ -61,6 +66,6 @@ parry_pose = Vector2(-10, 40)
 slash_color = Color(0.85, 0.95, 1, 1)
 moves = Array[Resource]([SubResource("Move_thrust"), SubResource("Move_sweep_left"), SubResource("Move_sweep_right")])
 model_scene = ExtResource("3_model")
-hold_offset = Vector3(0.08, 0.85, 0)
-two_handed = true
+hold_offset = Vector3(0.16, 0.85, 0)
+two_handed = false
 off_hand_offset = 0.5

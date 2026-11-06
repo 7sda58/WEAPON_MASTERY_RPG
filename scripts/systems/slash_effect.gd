@@ -10,7 +10,8 @@ static var _thrust_mesh: ArrayMesh
 
 
 ## sweep_sign: +1 = กวาดจากขวาไปซ้าย, -1 = จากซ้ายไปขวา | size: ขนาดวงโค้ง (1 = ดาบ)
-static func spawn(parent: Node3D, local_pos: Vector3, yaw: float, color: Color = Color(1.0, 0.97, 0.8), sweep_sign: float = 1.0, size: float = 1.0) -> void:
+## tilt_deg: เอียงระนาบรอยฟัน (องศา) — 0 = แนวนอน, ลบ = ด้านขวาต่ำ, บวก = ด้านขวาสูง
+static func spawn(parent: Node3D, local_pos: Vector3, yaw: float, color: Color = Color(1.0, 0.97, 0.8), sweep_sign: float = 1.0, size: float = 1.0, tilt_deg: float = 0.0) -> void:
 	var s := SlashEffect.new()
 	s.mesh = _get_mesh()
 	var mat := StandardMaterial3D.new()
@@ -23,7 +24,7 @@ static func spawn(parent: Node3D, local_pos: Vector3, yaw: float, color: Color =
 	s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(s)
 	s.position = local_pos
-	s.rotation = Vector3(deg_to_rad(-12.0), yaw, 0.0)  # เอียงเล็กน้อยให้มองเห็นจากกล้องด้านหลัง
+	s.rotation = Vector3(deg_to_rad(-12.0), yaw, deg_to_rad(tilt_deg))  # เอียงเล็กน้อยให้มองเห็นจากกล้องด้านหลัง
 	s.scale = Vector3.ONE * 0.75 * size
 	var t := s.create_tween().set_parallel(true)
 	t.tween_property(s, "scale", Vector3.ONE * 1.1 * size, 0.16).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)

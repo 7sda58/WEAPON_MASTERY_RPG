@@ -32,12 +32,20 @@ enum Kind {
 ## มุมเริ่มและมุมจบ (องศา) — ค่าลบ = ทางขวาของตัว, ค่าบวก = ทางซ้าย
 @export var sweep_from: float = -95.0
 @export var sweep_to: float = 85.0
+## มุมก้ม-เงยตอนเริ่มและจบ (องศา) — บวก = ยกสูง, ลบ = กดต่ำ
+## เท่ากัน = กวาดแนวนอน, ต่างกัน = ฟันเฉียง
+@export var sweep_pitch_from: float = -8.0
+@export var sweep_pitch_to: float = -8.0
 
 @export_group("Thrust (แทง)")
 ## ดึงอาวุธถอยหลังตอนง้าง (เมตร)
 @export var thrust_pullback: float = 0.35
 ## ยื่นอาวุธออกไปตอนแทง (เมตร)
 @export var thrust_extend: float = 0.8
+
+@export_group("Grip")
+## ใช้สองมือจับระหว่างท่านี้ (เช่น หอกแทง)
+@export var two_handed: bool = false
 
 @export_group("Movement")
 ## ก้าวไปข้างหน้าระหว่างช่วง Active (เมตรต่อวินาที, 0 = ยืนกับที่)

@@ -14,6 +14,7 @@ extends CharacterBody3D
 ## Task 3.1 — อาวุธอ่านจาก WeaponData (data/weapons/*.tres) + โมเดลอาวุธที่ถือ
 ## Task 2.6 — โมเดล 3D Low-poly (PlayerModel): เดิน/เอนตัว/บิดตัว และมือจับอาวุธตามท่าของอาวุธแต่ละชนิด (CR-014)
 ## Task 3.6 — เปลี่ยนอาวุธ: ปุ่ม 1 = ดาบ, 2 = หอก (ชั่วคราว จนกว่าจะมี Input Map)
+## Task 3.8–3.9 — Weapon Mastery: EXP/เลเวลแยกตามอาวุธ (MasteryComponent)
 ## Task 3.7 — ท่าโจมตีเป็นคอมโบ (AttackMove): ฟัน/ปัด หรือ แทง แต่ละท่ามี Hitbox และเอฟเฟกต์ของตัวเอง
 
 enum State { NORMAL, ATTACK, DODGE, PARRY, HITSTUN, DEAD }
@@ -110,6 +111,7 @@ var _dodge_dir: Vector3 = Vector3.ZERO
 var _ignore_attack_frames: int = 0
 
 var hurtbox: Hurtbox
+var mastery: MasteryComponent
 var _shake: float = 0.0
 var _spawn_pos: Vector3
 ## โครงสำหรับถืออาวุธ: WeaponRoot (หันตามตัวละคร) → SwingPivot (ท่าฟัน) → โมเดล
@@ -159,8 +161,47 @@ func _ready() -> void:
 	health.died.connect(_on_died)
 	hitbox.hit_landed.connect(func(_h: Hurtbox) -> void: shake(shake_on_hit))
 	_create_hurtbox()
+	_create_mastery()
 	_create_weapon_rig()
 	equip(weapon)
+
+
+# ---------------- WEAPON MASTERY ----------------
+func _create_mastery() -> void:
+	mastery = MasteryComponent.new()
+	mastery.name = "Mastery"
+	add_child(mastery)
+	mastery.leveled_up.connect(_on_mastery_level_up)
+	mastery.exp_gained.connect(func(_id: StringName, amount: int, reason: String) -> void:
+		print("Mastery +%d (%s)" % [amount, reason]))
+	hitbox.hit_landed.connect(_on_hit_landed_exp)
+
+
+## ตีโดน → ได้ EXP ให้อาวุธที่ถืออยู่
+func _on_hit_landed_exp(target: Hurtbox) -> void:
+	var amount: float = mastery.exp_hit
+	var reason: String = "hit"
+	if target.damage_multiplier > 1.0:
+		amount = mastery.exp_crit_hit
+		reason = "crit"
+	var is_training: bool = target.get_parent() is Dummy
+	if target.health and target.health.is_dead and not is_training:
+		amount += mastery.exp_kill
+		reason += "+kill"
+	if is_training:
+		amount *= mastery.training_multiplier
+	mastery.add_exp(weapon.id, amount, reason)
+
+
+func _on_mastery_level_up(weapon_id: StringName, level: int) -> void:
+	var data_name: String = String(weapon_id).capitalize()
+	for w in weapon_slots:
+		if w.id == weapon_id:
+			data_name = w.display_name
+	DamageNumber.spawn_text(get_tree().current_scene, global_position + Vector3(0, 0.4, 0), "%s Lv.%d!" % [data_name, level], Color(1.0, 0.8, 0.25))
+	HitSpark.spawn(get_tree().current_scene, global_position + Vector3(0, 1.0, 0), Color(1.0, 0.85, 0.3), 30)
+	if weapon_id == weapon.id:
+		_apply_move_hitbox(_move if _move else weapon.get_move(0))
 
 
 func _create_weapon_rig() -> void:
@@ -202,7 +243,8 @@ func _apply_move_hitbox(m: AttackMove) -> void:
 		var vis := $Hitbox/Visual as MeshInstance3D
 		vis.position = _hitbox_shape.position
 		vis.scale = m.hitbox_size / Vector3(1.1, 1.2, 1.0)
-	hitbox.damage = m.damage
+	var mult: float = mastery.damage_multiplier(weapon.id) if mastery else 1.0
+	hitbox.damage = roundi(m.damage * mult)
 	hitbox.hitstop_seconds = m.hitstop_seconds
 
 
@@ -264,15 +306,17 @@ func _update_weapon_pose() -> void:
 			_weapon_model.position.z = lerpf(out, grip.z, t)
 	else:
 		# ฟัน/ปัด: ง้างไปด้านหนึ่ง → กวาดผ่านหน้าตัวไปอีกด้าน → กลับท่าถือ
+		var p0: float = _move.sweep_pitch_from
+		var p1: float = _move.sweep_pitch_to
 		if f <= s:
 			var t: float = ease(float(f) / s, 0.5)
-			_set_pose(lerpf(idle.x, _move.sweep_from, t), lerpf(idle.y, POSE_SWING_PITCH, t))
+			_set_pose(lerpf(idle.x, _move.sweep_from, t), lerpf(idle.y, p0, t))
 		elif f <= s + a:
 			var t: float = float(f - s) / a
-			_set_pose(lerpf(_move.sweep_from, _move.sweep_to, t), POSE_SWING_PITCH)
+			_set_pose(lerpf(_move.sweep_from, _move.sweep_to, t), lerpf(p0, p1, t))
 		else:
 			var t: float = ease(float(f - s - a) / r, 2.0)
-			_set_pose(lerpf(_move.sweep_to, idle.x, t), lerpf(POSE_SWING_PITCH, idle.y, t))
+			_set_pose(lerpf(_move.sweep_to, idle.x, t), lerpf(p1, idle.y, t))
 
 
 ## สร้างพื้นที่รับดาเมจของผู้เล่น (Collision Layer 4 = ค่า 8) — Hitbox ของศัตรูจะมองหาชั้นนี้
@@ -300,9 +344,10 @@ func _on_hurtbox_hit(attacker: Hitbox) -> void:
 	if not health.invincible:
 		_take_hit(attacker)
 		return
-	var perfect_end: int = iframe_start + perfect_dodge_frames - 1
+	var perfect_end: int = iframe_start + perfect_dodge_frames + mastery.timing_bonus_frames(weapon.id) - 1
 	if state == State.DODGE and _state_frame <= perfect_end:
 		stamina.restore(perfect_dodge_refund)
+		mastery.add_exp(weapon.id, mastery.exp_perfect_dodge, "perfect dodge")
 		DamageNumber.spawn_text(get_tree().current_scene, global_position, "PERFECT!", Color(1.0, 0.85, 0.2))
 		_slow_motion()
 	else:
@@ -313,6 +358,7 @@ func _on_hurtbox_hit(attacker: Hitbox) -> void:
 func _on_parried(_hitbox: Hitbox) -> void:
 	hurtbox.parry_active = false
 	stamina.restore(parry_stamina_refund)
+	mastery.add_exp(weapon.id, mastery.exp_parry, "parry")
 	DamageNumber.spawn_text(get_tree().current_scene, global_position, "PARRY!", Color(1.0, 0.95, 0.4))
 	body.modulate = TINT_NORMAL
 	state = State.NORMAL
@@ -389,12 +435,15 @@ func _update_model(delta: float) -> void:
 			speed = 0.0
 			lean = 0.35
 
-	# มือจับอาวุธ: มือขวาที่ด้าม / มือซ้ายจับถัดขึ้นไป (อาวุธสองมือ)
+	# มือจับอาวุธ: มือขวาที่ด้าม / มือซ้ายจับถัดขึ้นไป (เฉพาะท่าที่ใช้สองมือ เช่น หอกแทง)
 	var right: Variant = null
 	var left: Variant = null
 	if _weapon_model and _weapon_model.visible:
 		right = _weapon_model.global_position
-		if weapon.two_handed:
+		var two_hands: bool = weapon.two_handed
+		if state == State.ATTACK and _move:
+			two_hands = _move.two_handed
+		if two_hands:
 			left = _weapon_model.to_global(Vector3(0, 0, -weapon.off_hand_offset))
 	body.update_pose(delta, speed, lean, crouch, twist, right, left)
 
@@ -603,7 +652,9 @@ func _spawn_attack_effect() -> void:
 	else:
 		var sweep_sign: float = signf(_move.sweep_to - _move.sweep_from)
 		var size: float = maxf(_move.reach / 0.85, 1.0)
-		SlashEffect.spawn(self, Vector3(0, 0.8, 0), yaw - 0.25 * sweep_sign, weapon.slash_color, sweep_sign, size)
+		# ฟันเฉียง: เอียงรอยตามมุมเริ่ม-จบ (ด้านที่จบต่ำกว่า = ด้านนั้นลง)
+		var tilt: float = (_move.sweep_pitch_to - _move.sweep_pitch_from) * 0.5 * -sweep_sign
+		SlashEffect.spawn(self, Vector3(0, 0.8, 0), yaw - 0.25 * sweep_sign, weapon.slash_color, sweep_sign, size, tilt)
 
 
 # ---------------- DODGE: พุ่ง (มี i-frame) → Recovery ----------------
@@ -650,12 +701,12 @@ func _start_parry() -> void:
 func _state_parry() -> void:
 	_state_frame += 1
 	_set_horizontal(Vector3.ZERO)
-	if _state_frame <= parry_window:
+	if _state_frame <= parry_window + mastery.timing_bonus_frames(weapon.id):
 		body.modulate = TINT_PARRY          # หน้าต่าง Parry: ตัวเรืองฟ้า
 	else:
 		hurtbox.parry_active = false
 		body.modulate = TINT_RECOVERY       # พลาด: ค้างท่า โดนตีได้
-	if _state_frame >= parry_window + parry_recovery:
+	if _state_frame >= parry_window + mastery.timing_bonus_frames(weapon.id) + parry_recovery:
 		body.modulate = TINT_NORMAL
 		state = State.NORMAL
 
