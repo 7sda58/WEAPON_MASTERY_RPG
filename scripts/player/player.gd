@@ -3,12 +3,18 @@ extends CharacterBody2D
 ## ตัวละครผู้เล่น
 ## Task 2.3 — Movement: เดิน 8 ทิศ ความเร็วแนวทแยงเท่าแนวตรง
 ## Task 2.7 / 2.8 — HealthComponent และ StaminaComponent
-## Task 2.9 — Basic Attack: นับเวลาเป็นเฟรม (60 เฟรม = 1 วินาที)
+## Task 2.9 — Basic Attack: นับเวลาเป็นเฟรม (60 เฟรม = 1 วินาที) / เล็งด้วยเมาส์ (Task 1.2)
 
 enum State { NORMAL, ATTACK, DEAD }
 
 ## ความเร็วเดิน (พิกเซลต่อวินาที)
 @export var walk_speed: float = 90.0
+
+@export_group("Aim")
+## true = โจมตีไปทางเมาส์ | false = โจมตีไปทางที่เดินอยู่
+@export var aim_with_mouse: bool = true
+## true = ล็อกทิศโจมตีเป็น 8 ทิศ | false = เล็งได้ทุกองศา
+@export var snap_aim_8_directions: bool = false
 
 @export_group("Basic Attack (หน่วย: เฟรม)")
 ## ช่วงง้าง — ยังไม่โดน
@@ -71,8 +77,20 @@ func _start_attack() -> void:
 	state = State.ATTACK
 	_state_frame = 0
 	velocity = Vector2.ZERO
+	if aim_with_mouse:
+		facing = _get_mouse_direction()  # หันตัวไปทางเมาส์ก่อนฟัน
 	hitbox.damage = attack_damage
 	hitbox.rotation = facing.angle()  # หมุน Hitbox ไปทางที่หันอยู่
+
+
+## ทิศจากตัวละครไปยังเมาส์ (วัดจากจุดกลางลำตัว ไม่ใช่เท้า)
+func _get_mouse_direction() -> Vector2:
+	var dir: Vector2 = get_global_mouse_position() - hitbox.global_position
+	if dir.length() < 1.0:
+		return facing  # เมาส์อยู่บนตัวพอดี — ใช้ทิศเดิม
+	if snap_aim_8_directions:
+		dir = Vector2.RIGHT.rotated(snappedf(dir.angle(), PI / 4.0))
+	return dir.normalized()
 
 
 func _state_attack() -> void:
