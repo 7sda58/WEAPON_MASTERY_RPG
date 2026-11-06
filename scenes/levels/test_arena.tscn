@@ -104,3 +104,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5.5)
 
 [node name="Slime2" parent="." instance=ExtResource("3_slime")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, 9)
+level = 3
+
+[node name="Slime3" parent="." instance=ExtResource("3_slime")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0, 7)
+level = 2

@@ -10,6 +10,7 @@ extends StaticBody3D
 
 
 func _ready() -> void:
+	EnemyHealthBar.attach(self, health, "Training Dummy", 0, 1.8)
 	health.damaged.connect(_on_damaged)
 	health.died.connect(_on_died)
 

@@ -186,8 +186,13 @@ func _on_hit_landed_exp(target: Hurtbox) -> void:
 		reason = "crit"
 	var is_training: bool = target.get_parent() is Dummy
 	if target.health and target.health.is_dead and not is_training:
-		amount += mastery.exp_kill
-		reason += "+kill"
+		# ศัตรูเลเวลสูง = EXP จากการฆ่ามากขึ้น (+50% ต่อเลเวล)
+		var enemy_level: int = 1
+		var lv: Variant = target.get_parent().get("level")
+		if lv != null:
+			enemy_level = int(lv)
+		amount += mastery.exp_kill * (1.0 + 0.5 * (enemy_level - 1))
+		reason += "+kill Lv%d" % enemy_level
 	if is_training:
 		amount *= mastery.training_multiplier
 	mastery.add_exp(weapon.id, amount, reason)
@@ -199,6 +204,7 @@ func _on_mastery_level_up(weapon_id: StringName, level: int) -> void:
 		if w.id == weapon_id:
 			data_name = w.display_name
 	DamageNumber.spawn_text(get_tree().current_scene, global_position + Vector3(0, 0.4, 0), "%s Lv.%d!" % [data_name, level], Color(1.0, 0.8, 0.25))
+	Sfx.play(get_tree().current_scene, &"level_up", -2.0)
 	HitSpark.spawn(get_tree().current_scene, global_position + Vector3(0, 1.0, 0), Color(1.0, 0.85, 0.3), 30)
 	if weapon_id == weapon.id:
 		_apply_move_hitbox(_move if _move else weapon.get_move(0))
@@ -348,6 +354,7 @@ func _on_hurtbox_hit(attacker: Hitbox) -> void:
 	if state == State.DODGE and _state_frame <= perfect_end:
 		stamina.restore(perfect_dodge_refund)
 		mastery.add_exp(weapon.id, mastery.exp_perfect_dodge, "perfect dodge")
+		Sfx.play_3d(get_tree().current_scene, &"perfect", global_position, 0.0, 1.0, 0.0)
 		DamageNumber.spawn_text(get_tree().current_scene, global_position, "PERFECT!", Color(1.0, 0.85, 0.2))
 		_slow_motion()
 	else:
@@ -359,6 +366,7 @@ func _on_parried(_hitbox: Hitbox) -> void:
 	hurtbox.parry_active = false
 	stamina.restore(parry_stamina_refund)
 	mastery.add_exp(weapon.id, mastery.exp_parry, "parry")
+	Sfx.play_3d(get_tree().current_scene, &"parry", global_position + facing * 0.5, 2.0)
 	DamageNumber.spawn_text(get_tree().current_scene, global_position, "PARRY!", Color(1.0, 0.95, 0.4))
 	body.modulate = TINT_NORMAL
 	state = State.NORMAL
@@ -375,6 +383,7 @@ func _slow_motion() -> void:
 ## โดนตีจริง — ยกเลิกท่าที่ทำอยู่ กระเด็นออกจากผู้โจมตี และชะงัก
 func _take_hit(attacker: Hitbox) -> void:
 	shake(shake_on_hurt)
+	Sfx.play_3d(get_tree().current_scene, &"hurt", global_position, -4.0)
 	if health.is_dead:
 		return
 	hitbox.deactivate()
@@ -646,6 +655,8 @@ func _state_attack() -> void:
 ## เอฟเฟกต์ตามชนิดท่า: แทง = รอยพุ่งตรง, ฟัน/ปัด = รอยโค้งตามทิศกวาด
 func _spawn_attack_effect() -> void:
 	var yaw: float = atan2(-facing.x, -facing.z)
+	var sound: StringName = &"thrust" if _move.kind == AttackMove.Kind.THRUST else &"swing"
+	Sfx.play_3d(get_tree().current_scene, sound, global_position + Vector3(0, 0.9, 0), -3.0, 1.15 if weapon.id == &"sword" else 0.9)
 	if _move.kind == AttackMove.Kind.THRUST:
 		var length: float = _move.reach + _move.hitbox_size.z * 0.5
 		SlashEffect.spawn_thrust(self, Vector3(0, 0.75, 0), yaw, length, weapon.slash_color)
@@ -661,6 +672,7 @@ func _spawn_attack_effect() -> void:
 func _start_dodge(move_dir: Vector3) -> void:
 	state = State.DODGE
 	_state_frame = 0
+	Sfx.play_3d(get_tree().current_scene, &"swing", global_position, -10.0, 0.6)
 	# หลบไปทางที่กดเดินอยู่ — ถ้ายืนนิ่งให้ถอยหลังจากทิศที่หัน
 	_dodge_dir = move_dir.normalized() if move_dir.length() > 0.05 else -facing
 

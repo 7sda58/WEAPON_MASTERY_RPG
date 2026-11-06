@@ -20,6 +20,10 @@ extends Node3D
 @export var flowers: int = 700
 @export var dirt_patches: int = 10
 
+@export_group("Ambience")
+## เสียงลมพื้นหลัง (วนซ้ำ)
+@export var wind_volume_db: float = -14.0
+
 @export_group("Ground")
 ## MeshInstance3D ของพื้น — ใส่ลายพื้นให้อัตโนมัติ
 @export var ground_mesh: MeshInstance3D
@@ -46,6 +50,24 @@ func _ready() -> void:
 	_spawn_pebbles()
 	_spawn_grass()
 	_spawn_flowers()
+	_start_wind()
+
+
+func _start_wind() -> void:
+	var path := "res://assets/audio/sfx/wind_loop.wav"
+	if not ResourceLoader.exists(path):
+		return
+	var s := load(path) as AudioStreamWAV
+	if s:
+		s.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		s.loop_begin = 0
+		s.loop_end = int(s.get_length() * s.mix_rate)
+	var p := AudioStreamPlayer.new()
+	p.name = "WindAmbience"
+	p.stream = s
+	p.volume_db = wind_volume_db
+	add_child(p)
+	p.play()
 
 
 # ---------------- วัสดุ ----------------

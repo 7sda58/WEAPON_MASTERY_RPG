@@ -8,6 +8,10 @@ extends CharacterBody3D
 enum State { IDLE, CHASE, TELEGRAPH, LUNGE, RECOVER, HITSTUN, STAGGERED, DEAD }
 
 
+@export var display_name: String = "Slime"
+## เลเวลศัตรู: HP +30% / ดาเมจ +20% / ตัวใหญ่ขึ้น 8% ต่อเลเวล — ฆ่าแล้วได้ Mastery EXP มากขึ้น
+@export_range(1, 10) var level: int = 1
+
 @export var detect_range: float = 8.0
 @export var give_up_range: float = 14.0
 ## เข้าใกล้ระยะนี้แล้วเริ่มง้าง
@@ -38,6 +42,8 @@ var _lunge_dir: Vector3 = Vector3.FORWARD
 var _spawn_pos: Vector3
 var _flash_frames: int = 0
 var _danger_mat: StandardMaterial3D
+## ขนาดตัวตามเลเวล
+var _size: float = 1.0
 ## ทิศที่สไลม์หัน
 var _facing: Vector3 = Vector3.BACK
 
@@ -61,10 +67,18 @@ func _ready() -> void:
 	danger_mesh.material_override = _danger_mat
 	danger_zone.visible = false
 	alert.visible = false
+	# ปรับความแข็งแกร่งตามเลเวล
+	health.max_health = roundi(health.max_health * (1.0 + 0.3 * (level - 1)))
+	health.reset()
+	attack_damage = roundi(attack_damage * (1.0 + 0.2 * (level - 1)))
+	_size = 1.0 + 0.08 * (level - 1)
+	_squash(Vector3.ONE)
+	EnemyHealthBar.attach(self, health, display_name, level, 1.5 * _size)
 	health.damaged.connect(_on_damaged)
 	health.died.connect(_on_died)
 	hitbox.parried.connect(_on_parried)
 	hitbox.hitstop_seconds = 0.09            # ถูกสไลม์ชน = หนักกว่าดาบเรา
+	hitbox.hit_sound = &"hit_heavy"
 	hitbox.spark_color = Color(1.0, 0.4, 0.3)
 
 
@@ -116,6 +130,11 @@ func _process(delta: float) -> void:
 	body.face_toward(_facing, delta, 25.0 if state == State.TELEGRAPH else 8.0)
 
 
+## ยุบ/ยืดตัว (คูณขนาดตามเลเวล)
+func _squash(v: Vector3) -> void:
+	body.scale = v * _size
+
+
 func _set_state(s: State) -> void:
 	state = s
 	_frame = 0
@@ -146,7 +165,7 @@ func _yaw_of(dir: Vector3) -> float:
 func _state_idle() -> void:
 	_set_h(Vector3.ZERO)
 	body.modulate = Color.WHITE
-	body.scale = Vector3.ONE
+	_squash(Vector3.ONE)
 	var p := _player()
 	if p and p.state != Player.State.DEAD and _to_player(p).length() < detect_range:
 		_set_state(State.CHASE)
@@ -165,7 +184,7 @@ func _state_chase() -> void:
 	_set_h(to.normalized() * move_speed)
 	# เด้งดึ๋ง ๆ ตอนเดิน
 	var hop: float = absf(sin(_frame * 0.22))
-	body.scale = Vector3(1.0 - 0.08 * hop, 1.0 + 0.1 * hop, 1.0)
+	_squash(Vector3(1.0 - 0.08 * hop, 1.0 + 0.1 * hop, 1.0))
 
 
 # ---------------- TELEGRAPH: ง้าง (สัญญาณเตือน) ----------------
@@ -176,6 +195,7 @@ func _start_telegraph(to_player: Vector3) -> void:
 	hitbox.rotation.y = _yaw_of(_lunge_dir)
 	danger_zone.visible = true
 	danger_fill.scale = Vector3(1.0, 1.0, 0.01)
+	Sfx.play_3d(get_tree().current_scene, &"warn_start", global_position, -3.0, 1.0, 0.0)
 	# "!" เด้งขึ้นเหนือหัว
 	alert.visible = true
 	alert.modulate = Color(1.0, 0.9, 0.2)
@@ -186,11 +206,14 @@ func _start_telegraph(to_player: Vector3) -> void:
 func _state_telegraph() -> void:
 	_set_h(Vector3.ZERO)
 	var t: float = float(_frame) / telegraph_frames
-	body.scale = Vector3(1.0 + 0.3 * t, 1.0 - 0.3 * t, 1.0)   # ยุบตัวเตรียมพุ่ง
+	_squash(Vector3(1.0 + 0.3 * t, 1.0 - 0.3 * t, 1.0))   # ยุบตัวเตรียมพุ่ง
 	body.modulate = Color.WHITE.lerp(Color(1.0, 0.35, 0.35), t)
 	_danger_mat.albedo_color.a = 0.25 + 0.3 * t                # พื้นที่อันตรายเข้มขึ้นเรื่อย ๆ
 	danger_fill.scale = Vector3(1.0, 1.0, maxf(t, 0.01))      # แถบยาวขึ้น — สุดแถบ = พุ่ง
 	# ช่วงท้าย: ตัวกระพริบขาวจ้า + "!" เป็นสีแดง = "หลบตอนนี้!"
+	if _frame == telegraph_frames - dodge_cue_frames + 1:
+		# เสียง "ติ๊ง!" = หลบตอนนี้ — เสียงเดิมทุกครั้ง (ไม่สุ่ม pitch) ให้จำจังหวะได้
+		Sfx.play_3d(get_tree().current_scene, &"warn_now", global_position, 2.0, 1.0, 0.0)
 	if _frame > telegraph_frames - dodge_cue_frames:
 		alert.modulate = Color(1.0, 0.25, 0.2)
 		if _frame % 2 == 0:
@@ -200,7 +223,8 @@ func _state_telegraph() -> void:
 		alert.visible = false
 		hitbox.damage = attack_damage
 		hitbox.activate()
-		body.scale = Vector3(0.8, 1.25, 1.0)
+		Sfx.play_3d(get_tree().current_scene, &"slime_lunge", global_position, -2.0)
+		_squash(Vector3(0.8, 1.25, 1.0))
 		_set_state(State.LUNGE)
 
 
@@ -216,7 +240,7 @@ func _state_lunge() -> void:
 # ---------------- RECOVER: พักเหนื่อย = ช่องให้สวน ----------------
 func _state_recover() -> void:
 	_set_h(Vector3.ZERO)
-	body.scale = Vector3(1.1, 0.9, 1.0)
+	_squash(Vector3(1.1, 0.9, 1.0))
 	body.modulate = Color(0.6, 0.6, 0.75)
 	if _frame >= recover_frames:
 		_set_state(State.CHASE)
@@ -242,7 +266,7 @@ func _on_parried() -> void:
 func _state_staggered() -> void:
 	velocity.x = move_toward(velocity.x, 0.0, 0.4)
 	velocity.z = move_toward(velocity.z, 0.0, 0.4)
-	body.scale = Vector3(1.15, 0.85, 1.0)
+	_squash(Vector3(1.15, 0.85, 1.0))
 	# กระพริบเหลือง = "ตีเลย! ตอนนี้แรง ×2"
 	body.modulate = Color(1.6, 1.4, 0.4) if (_frame / 6) % 2 == 0 else Color.WHITE
 	if _frame >= stagger_frames:
@@ -266,6 +290,7 @@ func _on_damaged(amount: int) -> void:
 
 func _on_died() -> void:
 	_set_state(State.DEAD)
+	Sfx.play_3d(get_tree().current_scene, &"slime_die", global_position)
 	hitbox.deactivate()
 	danger_zone.visible = false
 	alert.visible = false
@@ -284,7 +309,7 @@ func _respawn() -> void:
 	$CollisionShape3D.set_deferred("disabled", false)
 	hurtbox.set_deferred("monitorable", true)
 	body.modulate = Color.WHITE
-	body.scale = Vector3.ONE
+	_squash(Vector3.ONE)
 	_set_state(State.IDLE)
 
 

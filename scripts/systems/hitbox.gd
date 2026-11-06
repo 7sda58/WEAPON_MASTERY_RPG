@@ -17,6 +17,9 @@ signal hit_landed(hurtbox: Hurtbox)
 ## เกมหยุดนานแค่ไหนเมื่อโดน (วินาทีจริง) — 0.06 ≈ 4 เฟรม, 0 = ปิด
 @export var hitstop_seconds: float = 0.06
 @export var spark_color: Color = Color(1, 0.9, 0.4)
+## เสียงตอนตีโดน (ไฟล์ใน assets/audio/sfx/)
+@export var hit_sound: StringName = &"hit"
+@export var hit_volume_db: float = 0.0
 ## แสดงกล่องสีเหลือง (ใช้ตอนดีบักเท่านั้น)
 @export var show_debug_box: bool = false
 
@@ -63,6 +66,7 @@ func _on_area_entered(area: Area3D) -> void:
 		if to_attacker.length() > 0.01:
 			contact += to_attacker.normalized() * 0.35
 		HitSpark.spawn(get_tree().current_scene, contact, spark_color)
+		Sfx.play_3d(get_tree().current_scene, hit_sound, contact, hit_volume_db)
 		if hitstop_seconds > 0.0:
 			HitStop.apply(0.05, hitstop_seconds)
 		hit_landed.emit(hurtbox)
